@@ -2,10 +2,18 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 const api = {
   subjects: {
-    getAll:  ()                            => ipcRenderer.invoke('subjects:getAll'),
-    create:  (data: unknown)               => ipcRenderer.invoke('subjects:create', data),
-    update:  (id: number, data: unknown)   => ipcRenderer.invoke('subjects:update', id, data),
-    delete:  (id: number)                  => ipcRenderer.invoke('subjects:delete', id)
+    getAll:   (filter?: unknown)           => ipcRenderer.invoke('subjects:getAll', filter),
+    create:   (data: unknown)              => ipcRenderer.invoke('subjects:create', data),
+    update:   (id: number, data: unknown)  => ipcRenderer.invoke('subjects:update', id, data),
+    delete:   (id: number)                 => ipcRenderer.invoke('subjects:delete', id),
+    archive:  (id: number, archive: boolean) => ipcRenderer.invoke('subjects:archive', id, archive)
+  },
+  semesters: {
+    getAll:    ()                           => ipcRenderer.invoke('semesters:getAll'),
+    create:    (data: unknown)              => ipcRenderer.invoke('semesters:create', data),
+    update:    (id: number, data: unknown)  => ipcRenderer.invoke('semesters:update', id, data),
+    delete:    (id: number)                 => ipcRenderer.invoke('semesters:delete', id),
+    setActive: (id: number | null)          => ipcRenderer.invoke('semesters:setActive', id)
   },
   tasks: {
     getBySubject:      (subjectId: number)         => ipcRenderer.invoke('tasks:getBySubject', subjectId),
@@ -42,7 +50,7 @@ const api = {
     delete:  (id: number)                  => ipcRenderer.invoke('schedule:delete', id)
   },
   dashboard: {
-    getData: () => ipcRenderer.invoke('dashboard:getData'),
+    getData: (semesterId?: number | null) => ipcRenderer.invoke('dashboard:getData', semesterId),
   },
   notes: {
     getBySubject: (subjectId: number)                          => ipcRenderer.invoke('notes:getBySubject', subjectId),

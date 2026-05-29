@@ -2,6 +2,15 @@ export type TaskStatus   = 'not_started' | 'in_progress' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high'
 export type Theme        = 'light' | 'dark'
 
+export interface Semester {
+  id:         number
+  name:       string
+  start_date: string | null
+  end_date:   string | null
+  is_active:  number   // 0 | 1
+  created_at: string
+}
+
 export interface Tag {
   id:         number
   name:       string
@@ -14,6 +23,8 @@ export interface Subject {
   name:        string
   color:       string
   description: string | null
+  semester_id: number | null
+  is_archived: number   // 0 | 1
   created_at:  string
 }
 

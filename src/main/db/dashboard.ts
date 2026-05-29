@@ -69,20 +69,34 @@ function calcStreak(dates: string[]): number {
   return streak
 }
 
-export function getDashboardData(): DashboardData {
+export function getDashboardData(semesterId?: number | null): DashboardData {
   const db = getDb()
-  const today = new Date().toISOString().slice(0, 10)
+
+  // Collect the subject IDs in scope (non-archived, optionally filtered by semester)
+  let subjectRows: { id: number }[]
+  if (semesterId != null) {
+    subjectRows = db.prepare(
+      'SELECT id FROM subjects WHERE is_archived = 0 AND semester_id = ?'
+    ).all(semesterId) as { id: number }[]
+  } else {
+    subjectRows = db.prepare(
+      'SELECT id FROM subjects WHERE is_archived = 0'
+    ).all() as { id: number }[]
+  }
+  const subjectIds = subjectRows.map((r) => r.id)
+  const inClause   = subjectIds.length > 0 ? `(${subjectIds.join(',')})` : '(NULL)'
 
   // ── Task stats ────────────────────────────────────────────────────────────
   const taskRows = db.prepare(`
     SELECT
-      COUNT(*)                                                         AS total,
-      SUM(CASE WHEN status = 'done'         THEN 1 ELSE 0 END)        AS done,
-      SUM(CASE WHEN status = 'in_progress'  THEN 1 ELSE 0 END)        AS in_progress,
-      SUM(CASE WHEN status = 'not_started'  THEN 1 ELSE 0 END)        AS not_started,
+      COUNT(*)                                                              AS total,
+      SUM(CASE WHEN status = 'done'         THEN 1 ELSE 0 END)             AS done,
+      SUM(CASE WHEN status = 'in_progress'  THEN 1 ELSE 0 END)             AS in_progress,
+      SUM(CASE WHEN status = 'not_started'  THEN 1 ELSE 0 END)             AS not_started,
       SUM(CASE WHEN status != 'done' AND due_date IS NOT NULL
-               AND due_date < DATE('now','localtime') THEN 1 ELSE 0 END) AS overdue
+               AND due_date < DATE('now','localtime') THEN 1 ELSE 0 END)   AS overdue
     FROM tasks
+    WHERE subject_id IN ${inClause}
   `).get() as { total: number; done: number; in_progress: number; not_started: number; overdue: number }
 
   const taskStats: TaskStats = {
@@ -103,6 +117,7 @@ export function getDashboardData(): DashboardData {
       SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END)      AS done
     FROM subjects s
     LEFT JOIN tasks t ON t.subject_id = s.id
+    WHERE s.id IN ${inClause}
     GROUP BY s.id
     ORDER BY s.name
   `).all() as { subject_id: number; subject_name: string; subject_color: string; total: number; done: number }[])
@@ -117,7 +132,8 @@ export function getDashboardData(): DashboardData {
            s.name AS subject_name, s.color AS subject_color
     FROM tasks t
     JOIN subjects s ON s.id = t.subject_id
-    WHERE t.status != 'done'
+    WHERE t.subject_id IN ${inClause}
+      AND t.status != 'done'
       AND t.due_date IS NOT NULL
       AND t.due_date >= DATE('now','localtime')
       AND t.due_date <= DATE('now', '+7 days','localtime')
@@ -125,14 +141,14 @@ export function getDashboardData(): DashboardData {
     LIMIT 15
   `).all() as DeadlineTask[]
 
-  // ── Study time — last 7 days ──────────────────────────────────────────────
+  // ── Study time — last 7 days (always global: personal habit metric) ───────
   const weekRow = db.prepare(`
     SELECT COALESCE(SUM(duration_seconds), 0) AS s
     FROM study_sessions
     WHERE DATE(started_at) >= DATE('now', '-6 days', 'localtime')
   `).get() as { s: number }
 
-  // ── Activity — last 14 days (with gap fill) ───────────────────────────────
+  // ── Activity — last 14 days (with gap fill, always global) ───────────────
   const rawActivity = db.prepare(`
     SELECT DATE(started_at) AS date, SUM(duration_seconds) AS total_seconds
     FROM study_sessions
@@ -149,16 +165,16 @@ export function getDashboardData(): DashboardData {
     activityByDay.push({ date: ds, total_seconds: actMap.get(ds) ?? 0 })
   }
 
-  // ── Overall GPA ───────────────────────────────────────────────────────────
+  // ── Overall GPA (filtered by semester scope) ──────────────────────────────
   const gpaRow = db.prepare(`
-    SELECT
-      SUM((g.value / g.max_value) * g.weight) / SUM(g.weight) AS avg
+    SELECT SUM((g.value / g.max_value) * g.weight) / SUM(g.weight) AS avg
     FROM grades g
+    WHERE g.subject_id IN ${inClause}
     HAVING COUNT(*) > 0
   `).get() as { avg: number } | undefined
   const overallGpa = gpaRow?.avg ?? null
 
-  // ── Streak ────────────────────────────────────────────────────────────────
+  // ── Streak (global: personal study habit) ────────────────────────────────
   const studyDates = (db.prepare(`
     SELECT DISTINCT DATE(started_at) AS date
     FROM study_sessions

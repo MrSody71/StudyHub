@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import type { DashboardData } from '../types'
+import type { DashboardData, Semester } from '../types'
 
 interface Props {
   refreshKey:  number
   gradeScale:  number
+  semesters:   Semester[]
   onNavigate:  (subjectId: number, taskId: number) => void
 }
 
@@ -96,19 +97,28 @@ function ActivityChart({ days, maxSeconds }: { days: DashboardData['activityByDa
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function Dashboard({ refreshKey, gradeScale, onNavigate }: Props) {
-  const [data,    setData]    = useState<DashboardData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
+export default function Dashboard({ refreshKey, gradeScale, semesters, onNavigate }: Props) {
+  const [data,               setData]               = useState<DashboardData | null>(null)
+  const [loading,            setLoading]            = useState(true)
+  const [error,              setError]              = useState<string | null>(null)
+  const [filterSemesterId,   setFilterSemesterId]   = useState<number | null>(null)
+
+  // When semesters load, default to active semester if one exists
+  useEffect(() => {
+    const active = semesters.find((s) => s.is_active === 1)
+    if (active && filterSemesterId === null) {
+      setFilterSemesterId(active.id)
+    }
+  }, [semesters])
 
   useEffect(() => {
     setLoading(true)
-    window.api.dashboard.getData().then((r) => {
+    window.api.dashboard.getData(filterSemesterId).then((r) => {
       if (r.success) { setData(r.data); setError(null) }
       else setError(r.error)
       setLoading(false)
     }).catch((e) => { setError(String(e)); setLoading(false) })
-  }, [refreshKey])
+  }, [refreshKey, filterSemesterId])
 
   if (loading) return <div className="dash-loading">Загрузка дашборда…</div>
   if (error)   return <div className="dash-loading" style={{ color: 'var(--danger)' }}>Ошибка: {error}</div>
@@ -123,6 +133,24 @@ export default function Dashboard({ refreshKey, gradeScale, onNavigate }: Props)
       {/* ── Header ──────────────────────────────────────────────────── */}
       <div className="dash-header">
         <div className="panel-title">🏠 Дашборд</div>
+
+        {/* Semester filter */}
+        {semesters.length > 0 && (
+          <div className="dash-semester-filter">
+            <select
+              className="dash-semester-select"
+              value={filterSemesterId ?? ''}
+              onChange={(e) => setFilterSemesterId(e.target.value === '' ? null : Number(e.target.value))}
+            >
+              <option value="">Все семестры</option>
+              {semesters.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}{s.is_active ? ' ★' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="dash-scroll">

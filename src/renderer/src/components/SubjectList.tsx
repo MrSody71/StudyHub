@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Subject, SubjectGradeStat } from '../types'
+import type { Subject, SubjectGradeStat, Semester } from '../types'
 
 const COLORS = [
   '#ef4444','#f97316','#eab308','#22c55e',
@@ -8,14 +8,17 @@ const COLORS = [
 ]
 
 interface Props {
-  subjects:          Subject[]
-  selectedSubjectId: number | null
-  gradeStats?:       SubjectGradeStat[]
-  gradeScale?:       number
-  onSelect:          (id: number) => void
-  onCreate:          (data: { name: string; color: string; description?: string | null }) => void
-  onUpdate:          (id: number, data: Partial<Omit<Subject, 'id' | 'created_at'>>) => void
-  onDelete:          (id: number) => void
+  subjects:           Subject[]
+  archivedSubjects:   Subject[]
+  selectedSubjectId:  number | null
+  semesters:          Semester[]
+  gradeStats?:        SubjectGradeStat[]
+  gradeScale?:        number
+  onSelect:           (id: number) => void
+  onCreate:           (data: { name: string; color: string; description?: string | null; semester_id?: number | null }) => void
+  onUpdate:           (id: number, data: Partial<Omit<Subject, 'id' | 'created_at'>>) => void
+  onDelete:           (id: number) => void
+  onArchive:          (id: number, archive: boolean) => void
 }
 
 interface ModalState {
@@ -23,22 +26,29 @@ interface ModalState {
   editing: Subject | null
 }
 
-export default function SubjectList({ subjects, selectedSubjectId, gradeStats, gradeScale = 100, onSelect, onCreate, onUpdate, onDelete }: Props) {
-  const [modal, setModal]       = useState<ModalState>({ open: false, editing: null })
-  const [name, setName]         = useState('')
-  const [color, setColor]       = useState(COLORS[5])
-  const [desc, setDesc]         = useState('')
-  const [saving, setSaving]     = useState(false)
-  const [search, setSearch]     = useState('')
+export default function SubjectList({
+  subjects, archivedSubjects, selectedSubjectId, semesters, gradeStats, gradeScale = 100,
+  onSelect, onCreate, onUpdate, onDelete, onArchive,
+}: Props) {
+  const [modal,       setModal]      = useState<ModalState>({ open: false, editing: null })
+  const [name,        setName]       = useState('')
+  const [color,       setColor]      = useState(COLORS[5])
+  const [desc,        setDesc]       = useState('')
+  const [semesterId,  setSemesterId] = useState<number | ''>('')
+  const [saving,      setSaving]     = useState(false)
+  const [search,      setSearch]     = useState('')
+  const [showArchive, setShowArchive] = useState(false)
 
   function openCreate() {
     setName(''); setColor(COLORS[5]); setDesc('')
+    setSemesterId(semesters.find((s) => s.is_active === 1)?.id ?? '')
     setModal({ open: true, editing: null })
   }
 
   function openEdit(e: React.MouseEvent, s: Subject) {
     e.stopPropagation()
     setName(s.name); setColor(s.color); setDesc(s.description ?? '')
+    setSemesterId(s.semester_id ?? '')
     setModal({ open: true, editing: s })
   }
 
@@ -49,10 +59,15 @@ export default function SubjectList({ subjects, selectedSubjectId, gradeStats, g
     if (!name.trim()) return
     setSaving(true)
     try {
+      const sid = semesterId !== '' ? (semesterId as number) : null
       if (modal.editing) {
-        await onUpdate(modal.editing.id, { name: name.trim(), color, description: desc.trim() || null })
+        await onUpdate(modal.editing.id, {
+          name: name.trim(), color,
+          description: desc.trim() || null,
+          semester_id: sid,
+        })
       } else {
-        await onCreate({ name: name.trim(), color, description: desc.trim() || null })
+        await onCreate({ name: name.trim(), color, description: desc.trim() || null, semester_id: sid })
       }
       close()
     } finally {
@@ -64,9 +79,27 @@ export default function SubjectList({ subjects, selectedSubjectId, gradeStats, g
     ? subjects.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
     : subjects
 
+  const filteredArchived = search.trim()
+    ? archivedSubjects.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
+    : archivedSubjects
+
+  const displayList   = showArchive ? filteredArchived : filtered
+  const activeSemName = (id: number | null) => semesters.find((s) => s.id === id)?.name
+
   return (
     <>
-      <div className="sidebar-section-label">Предметы</div>
+      <div className="sidebar-section-label">
+        Предметы
+        {archivedSubjects.length > 0 && (
+          <button
+            className={`archive-toggle-btn${showArchive ? ' active' : ''}`}
+            onClick={() => setShowArchive((v) => !v)}
+            title={showArchive ? 'Показать активные' : 'Показать архив'}
+          >
+            {showArchive ? '← Активные' : `Архив (${archivedSubjects.length})`}
+          </button>
+        )}
+      </div>
 
       <div style={{ padding: '0 8px 4px' }}>
         <input
@@ -78,42 +111,69 @@ export default function SubjectList({ subjects, selectedSubjectId, gradeStats, g
       </div>
 
       <div className="subjects-list">
-        {filtered.map((s) => {
-          const stat = gradeStats?.find((g) => g.subject_id === s.id)
+        {displayList.map((s) => {
+          const stat     = gradeStats?.find((g) => g.subject_id === s.id)
+          const semName  = activeSemName(s.semester_id)
+          const archived = s.is_archived === 1
           return (
-          <div
-            key={s.id}
-            className={`subject-item${selectedSubjectId === s.id ? ' selected' : ''}`}
-            onClick={() => onSelect(s.id)}
-          >
-            <span className="subject-dot" style={{ background: s.color }} />
-            <span className="subject-name">{s.name}</span>
-            {stat && (
-              <span className="subject-grade-badge" style={{ color: s.color }}>
-                {(stat.weighted_avg * gradeScale).toFixed(gradeScale <= 10 ? 1 : 0)}
+            <div
+              key={s.id}
+              className={`subject-item${!archived && selectedSubjectId === s.id ? ' selected' : ''}${archived ? ' archived' : ''}`}
+              onClick={() => !archived && onSelect(s.id)}
+              title={archived ? s.name : undefined}
+            >
+              <span className="subject-dot" style={{ background: s.color }} />
+              <span className="subject-name">
+                {s.name}
+                {semName && <span className="subject-sem-badge">{semName}</span>}
               </span>
-            )}
-            <span className="subject-actions" onClick={(e) => e.stopPropagation()}>
-              <button className="icon-btn" title="Редактировать" onClick={(e) => openEdit(e, s)}>✏</button>
-              <button className="icon-btn danger" title="Удалить" onClick={(e) => { e.stopPropagation(); onDelete(s.id) }}>🗑</button>
-            </span>
-          </div>
+              {stat && !archived && (
+                <span className="subject-grade-badge" style={{ color: s.color }}>
+                  {(stat.weighted_avg * gradeScale).toFixed(gradeScale <= 10 ? 1 : 0)}
+                </span>
+              )}
+              <span className="subject-actions" onClick={(e) => e.stopPropagation()}>
+                {archived ? (
+                  <button
+                    className="icon-btn"
+                    title="Восстановить из архива"
+                    onClick={() => onArchive(s.id, false)}
+                  >↩</button>
+                ) : (
+                  <>
+                    <button className="icon-btn" title="Редактировать" onClick={(e) => openEdit(e, s)}>✏</button>
+                    <button
+                      className="icon-btn"
+                      title="В архив"
+                      onClick={() => onArchive(s.id, true)}
+                    >📦</button>
+                    <button className="icon-btn danger" title="Удалить" onClick={(e) => { e.stopPropagation(); onDelete(s.id) }}>🗑</button>
+                  </>
+                )}
+              </span>
+            </div>
           )
         })}
 
-        {filtered.length === 0 && (
+        {displayList.length === 0 && (
           <div style={{ padding: '12px 10px', color: 'rgba(255,255,255,.25)', fontSize: 12 }}>
-            {search ? 'Ничего не найдено' : 'Нет предметов. Добавьте первый!'}
+            {search
+              ? 'Ничего не найдено'
+              : showArchive
+                ? 'Архив пуст'
+                : 'Нет предметов. Добавьте первый!'}
           </div>
         )}
       </div>
 
-      <div style={{ padding: '4px 8px 8px' }}>
-        <button className="add-subject-btn" onClick={openCreate}>
-          <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
-          Добавить предмет
-        </button>
-      </div>
+      {!showArchive && (
+        <div style={{ padding: '4px 8px 8px' }}>
+          <button className="add-subject-btn" onClick={openCreate}>
+            <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+            Добавить предмет
+          </button>
+        </div>
+      )}
 
       {modal.open && (
         <div className="modal-overlay" onClick={close}>
@@ -155,6 +215,24 @@ export default function SubjectList({ subjects, selectedSubjectId, gradeStats, g
                     ))}
                   </div>
                 </div>
+
+                {semesters.length > 0 && (
+                  <div className="form-group">
+                    <label className="form-label">Семестр</label>
+                    <select
+                      className="form-input"
+                      value={semesterId}
+                      onChange={(e) => setSemesterId(e.target.value === '' ? '' : Number(e.target.value))}
+                    >
+                      <option value="">— Без семестра —</option>
+                      {semesters.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}{s.is_active ? ' (активный)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div className="form-group">
                   <label className="form-label">Описание (необязательно)</label>

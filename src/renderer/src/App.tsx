@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, Grade, SubjectGradeStat, Note, Theme } from './types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, Grade, SubjectGradeStat, Note, Semester, Theme } from './types'
 import Dashboard from './components/Dashboard'
 import SubjectList from './components/SubjectList'
+import SemesterManager from './components/SemesterManager'
 import TaskList from './components/TaskList'
 import TaskDetail from './components/TaskDetail'
 import GradeList from './components/GradeList'
@@ -28,6 +29,9 @@ export default function App() {
   const [view, setView]                     = useState<AppView>('dashboard')
   const [dashRefreshKey, setDashRefreshKey] = useState(0)
   const [subjects, setSubjects]             = useState<Subject[]>([])
+  const [archivedSubjects, setArchivedSubjects] = useState<Subject[]>([])
+  const [semesters, setSemesters]           = useState<Semester[]>([])
+  const [showSemesterMgr, setShowSemesterMgr] = useState(false)
   const [tasks, setTasks]                   = useState<Task[]>([])
   const [allDeadlineTasks, setAllDeadlineTasks] = useState<Task[]>([])
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([])
@@ -60,6 +64,8 @@ export default function App() {
 
   useEffect(() => {
     void loadSubjects()
+    void loadArchivedSubjects()
+    void loadSemesters()
     void loadTheme()
     void loadTags()
     void loadScheduleEntries()
@@ -109,6 +115,16 @@ export default function App() {
 
   async function loadSubjects() {
     try { setSubjects(await unwrap(window.api.subjects.getAll())) }
+    catch (e) { setError(String(e)) }
+  }
+
+  async function loadArchivedSubjects() {
+    try { setArchivedSubjects(await unwrap(window.api.subjects.getAll({ archived: true }))) }
+    catch (e) { setError(String(e)) }
+  }
+
+  async function loadSemesters() {
+    try { setSemesters(await unwrap(window.api.semesters.getAll())) }
     catch (e) { setError(String(e)) }
   }
 
@@ -182,6 +198,7 @@ export default function App() {
   async function handleUpdateSubject(id: number, data: Partial<Omit<Subject, 'id' | 'created_at'>>) {
     const s = await unwrap(window.api.subjects.update(id, data))
     setSubjects((prev) => prev.map((x) => x.id === id ? s : x).sort((a, b) => a.name.localeCompare(b.name)))
+    setArchivedSubjects((prev) => prev.map((x) => x.id === id ? s : x).sort((a, b) => a.name.localeCompare(b.name)))
   }
 
   async function handleDeleteSubject(id: number) {
@@ -189,6 +206,43 @@ export default function App() {
     await unwrap(window.api.subjects.delete(id))
     setSubjects((prev) => prev.filter((s) => s.id !== id))
     if (selectedSubjectId === id) setSelectedSubjectId(null)
+  }
+
+  async function handleArchiveSubject(id: number, archive: boolean) {
+    const s = await unwrap(window.api.subjects.archive(id, archive))
+    if (archive) {
+      setSubjects((prev) => prev.filter((x) => x.id !== id))
+      setArchivedSubjects((prev) => [...prev, s].sort((a, b) => a.name.localeCompare(b.name)))
+      if (selectedSubjectId === id) setSelectedSubjectId(null)
+    } else {
+      setArchivedSubjects((prev) => prev.filter((x) => x.id !== id))
+      setSubjects((prev) => [...prev, s].sort((a, b) => a.name.localeCompare(b.name)))
+    }
+  }
+
+  // ── Semester handlers ────────────────────────────────────────────────────
+  async function handleCreateSemester(data: { name: string; start_date?: string | null; end_date?: string | null }) {
+    const s = await unwrap(window.api.semesters.create(data))
+    setSemesters((prev) => [s, ...prev])
+  }
+
+  async function handleUpdateSemester(id: number, data: { name?: string; start_date?: string | null; end_date?: string | null }) {
+    const s = await unwrap(window.api.semesters.update(id, data))
+    setSemesters((prev) => prev.map((x) => x.id === id ? s : x))
+  }
+
+  async function handleDeleteSemester(id: number) {
+    await unwrap(window.api.semesters.delete(id))
+    setSemesters((prev) => prev.filter((s) => s.id !== id))
+    // Reload subjects — their semester_id may now be NULL
+    void loadSubjects()
+    void loadArchivedSubjects()
+  }
+
+  async function handleSetActiveSemester(id: number | null) {
+    await unwrap(window.api.semesters.setActive(id))
+    setSemesters((prev) => prev.map((s) => ({ ...s, is_active: s.id === id ? 1 : 0 })))
+    setDashRefreshKey((k) => k + 1)
   }
 
   // ── Task handlers ────────────────────────────────────────────────────────
@@ -403,15 +457,26 @@ export default function App() {
 
         <SubjectList
           subjects={subjects}
+          archivedSubjects={archivedSubjects}
           selectedSubjectId={selectedSubjectId}
+          semesters={semesters}
           gradeStats={gradeStats}
           gradeScale={gradeScale}
           onSelect={(id) => { setSelectedSubjectId(id); if (view !== 'tasks') setView('tasks') }}
           onCreate={handleCreateSubject}
           onUpdate={handleUpdateSubject}
           onDelete={handleDeleteSubject}
+          onArchive={handleArchiveSubject}
         />
         <div className="sidebar-footer">
+          <button className="semesters-btn" onClick={() => setShowSemesterMgr(true)}>
+            🎓 Семестры
+            {semesters.find((s) => s.is_active) && (
+              <span className="semester-active-chip">
+                {semesters.find((s) => s.is_active)!.name}
+              </span>
+            )}
+          </button>
           {gradeStats.length > 0 && (() => {
             const totalW = gradeStats.reduce((s, x) => s + x.grade_count, 0)
             const overall = totalW > 0
@@ -434,6 +499,7 @@ export default function App() {
           <Dashboard
             refreshKey={dashRefreshKey}
             gradeScale={gradeScale}
+            semesters={semesters}
             onNavigate={(subjectId, taskId) => {
               handleNavigateToTask(subjectId, taskId)
             }}
@@ -585,6 +651,17 @@ export default function App() {
           onUpdateTag={handleUpdateTag}
           onDeleteTag={handleDeleteTag}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {showSemesterMgr && (
+        <SemesterManager
+          semesters={semesters}
+          onCreate={handleCreateSemester}
+          onUpdate={handleUpdateSemester}
+          onDelete={handleDeleteSemester}
+          onSetActive={handleSetActiveSemester}
+          onClose={() => setShowSemesterMgr(false)}
         />
       )}
     </div>

@@ -176,6 +176,27 @@ const migrations: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at);
       `)
     }
+  },
+  {
+    version: 9,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS semesters (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          name       TEXT    NOT NULL,
+          start_date TEXT,
+          end_date   TEXT,
+          is_active  INTEGER NOT NULL DEFAULT 0 CHECK (is_active IN (0, 1)),
+          created_at TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+
+        ALTER TABLE subjects ADD COLUMN semester_id INTEGER REFERENCES semesters(id) ON DELETE SET NULL;
+        ALTER TABLE subjects ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1));
+
+        CREATE INDEX IF NOT EXISTS idx_subjects_semester  ON subjects(semester_id);
+        CREATE INDEX IF NOT EXISTS idx_subjects_archived  ON subjects(is_archived);
+      `)
+    }
   }
 ]
 

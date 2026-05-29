@@ -1,5 +1,6 @@
 import { ipcMain, dialog, BrowserWindow, Notification } from 'electron'
-import { getAllSubjects, createSubject, updateSubject, deleteSubject } from '../db/subjects'
+import { getAllSubjects, createSubject, updateSubject, deleteSubject, archiveSubject } from '../db/subjects'
+import { getAllSemesters, createSemester, updateSemester, deleteSemester, setActiveSemester } from '../db/semesters'
 import { getTasksBySubject, getAllTasksWithDeadline, createTask, updateTask, deleteTask, completeTaskAndSpawnNext } from '../db/tasks'
 import {
   getAttachmentsByTask, addAttachment, deleteAttachment, openAttachment
@@ -31,10 +32,18 @@ function wrap<T>(fn: () => T): { success: true; data: T } | { success: false; er
 
 export function setupIpcHandlers(): void {
   // ── Subjects ─────────────────────────────────────────────────────────────
-  ipcMain.handle('subjects:getAll', () => wrap(() => getAllSubjects()))
-  ipcMain.handle('subjects:create', (_e, data) => wrap(() => createSubject(data)))
-  ipcMain.handle('subjects:update', (_e, id: number, data) => wrap(() => updateSubject(id, data)))
-  ipcMain.handle('subjects:delete', (_e, id: number) => wrap(() => { deleteSubject(id); return null }))
+  ipcMain.handle('subjects:getAll',    (_e, filter?)             => wrap(() => getAllSubjects(filter)))
+  ipcMain.handle('subjects:create',    (_e, data)                => wrap(() => createSubject(data)))
+  ipcMain.handle('subjects:update',    (_e, id: number, data)    => wrap(() => updateSubject(id, data)))
+  ipcMain.handle('subjects:delete',    (_e, id: number)          => wrap(() => { deleteSubject(id); return null }))
+  ipcMain.handle('subjects:archive',   (_e, id: number, archive: boolean) => wrap(() => archiveSubject(id, archive)))
+
+  // ── Semesters ─────────────────────────────────────────────────────────────
+  ipcMain.handle('semesters:getAll',    ()                          => wrap(() => getAllSemesters()))
+  ipcMain.handle('semesters:create',    (_e, data)                 => wrap(() => createSemester(data)))
+  ipcMain.handle('semesters:update',    (_e, id: number, data)     => wrap(() => updateSemester(id, data)))
+  ipcMain.handle('semesters:delete',    (_e, id: number)           => wrap(() => { deleteSemester(id); return null }))
+  ipcMain.handle('semesters:setActive', (_e, id: number | null)    => wrap(() => { setActiveSemester(id); return null }))
 
   // ── Tasks ─────────────────────────────────────────────────────────────────
   ipcMain.handle('tasks:getBySubject',        (_e, subjectId: number) => wrap(() => getTasksBySubject(subjectId)))
@@ -71,7 +80,7 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('schedule:delete',    (_e, id: number)           => wrap(() => { deleteScheduleEntry(id); return null }))
 
   // ── Dashboard ────────────────────────────────────────────────────────────
-  ipcMain.handle('dashboard:getData', () => wrap(() => getDashboardData()))
+  ipcMain.handle('dashboard:getData', (_e, semesterId?: number | null) => wrap(() => getDashboardData(semesterId)))
 
   // ── Notes ────────────────────────────────────────────────────────────────
   ipcMain.handle('notes:getBySubject', (_e, subjectId: number) => wrap(() => getNotesBySubject(subjectId)))

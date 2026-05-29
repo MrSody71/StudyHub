@@ -1,4 +1,4 @@
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, StudySession, SessionStats, Grade, SubjectGradeStat, Note, DashboardData } from '../renderer/src/types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, StudySession, SessionStats, Grade, SubjectGradeStat, Note, DashboardData, Semester } from '../renderer/src/types'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
 
@@ -6,10 +6,18 @@ declare global {
   interface Window {
     api: {
       subjects: {
-        getAll:  ()                                                                => Promise<IpcResult<Subject[]>>
-        create:  (data: { name: string; color: string; description?: string | null }) => Promise<IpcResult<Subject>>
-        update:  (id: number, data: Partial<Omit<Subject, 'id' | 'created_at'>>) => Promise<IpcResult<Subject>>
-        delete:  (id: number)                                                     => Promise<IpcResult<null>>
+        getAll:   (filter?: { archived?: boolean; semesterId?: number })               => Promise<IpcResult<Subject[]>>
+        create:   (data: { name: string; color: string; description?: string | null; semester_id?: number | null }) => Promise<IpcResult<Subject>>
+        update:   (id: number, data: Partial<Omit<Subject, 'id' | 'created_at'>>)     => Promise<IpcResult<Subject>>
+        delete:   (id: number)                                                         => Promise<IpcResult<null>>
+        archive:  (id: number, archive: boolean)                                       => Promise<IpcResult<Subject>>
+      }
+      semesters: {
+        getAll:    ()                                                                         => Promise<IpcResult<Semester[]>>
+        create:    (data: { name: string; start_date?: string | null; end_date?: string | null }) => Promise<IpcResult<Semester>>
+        update:    (id: number, data: Partial<Omit<Semester, 'id' | 'created_at'>>)          => Promise<IpcResult<Semester>>
+        delete:    (id: number)                                                               => Promise<IpcResult<null>>
+        setActive: (id: number | null)                                                        => Promise<IpcResult<null>>
       }
       tasks: {
         getBySubject:      (subjectId: number)                                        => Promise<IpcResult<Task[]>>
@@ -46,7 +54,7 @@ declare global {
         delete:  (id: number)                                                         => Promise<IpcResult<null>>
       }
       dashboard: {
-        getData: () => Promise<IpcResult<DashboardData>>
+        getData: (semesterId?: number | null) => Promise<IpcResult<DashboardData>>
       }
       notes: {
         getBySubject: (subjectId: number)                                             => Promise<IpcResult<Note[]>>
