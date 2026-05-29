@@ -1,14 +1,16 @@
-import { useState } from 'react'
-import type { Subject, Task, TaskStatus, TaskPriority } from '../types'
+import { useState, useMemo } from 'react'
+import type { Subject, Task, Tag, TaskStatus, TaskPriority } from '../types'
 
 interface Props {
-  subject:          Subject | null
-  tasks:            Task[]
-  selectedTaskId:   number | null
-  onSelectTask:     (id: number) => void
-  onCreateTask:     (data: Omit<Task, 'id' | 'created_at'>) => void
-  onUpdateTask:     (id: number, data: Partial<Omit<Task, 'id' | 'created_at' | 'subject_id'>>) => void
-  onDeleteTask:     (id: number) => void
+  subject:              Subject | null
+  tasks:                Task[]
+  allTags:              Tag[]
+  selectedTaskId:       number | null
+  onSelectTask:         (id: number) => void
+  onCreateTask:         (data: Omit<Task, 'id' | 'created_at'>) => void
+  onUpdateTask:         (id: number, data: Partial<Omit<Task, 'id' | 'created_at' | 'subject_id'>>) => void
+  onDeleteTask:         (id: number) => void
+  onCompleteRecurring:  (id: number) => void
 }
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -23,14 +25,42 @@ const PRIORITY_LABELS: Record<TaskPriority, string> = {
   high:   'Высокий',
 }
 
+const TAG_COLORS = [
+  '#ef4444','#f97316','#eab308','#22c55e',
+  '#14b8a6','#3b82f6','#8b5cf6','#ec4899',
+]
+
+// ── Recurrence helpers ────────────────────────────────────────────────────────
+
+function formatRecurrence(rule: string | null | undefined): string {
+  if (!rule) return ''
+  try {
+    const r = JSON.parse(rule) as { unit: string; interval: number }
+    if (r.interval === 1) {
+      if (r.unit === 'day')   return 'Каждый день'
+      if (r.unit === 'week')  return 'Каждую неделю'
+      if (r.unit === 'month') return 'Каждый месяц'
+    }
+    const u = r.unit === 'day' ? 'дн.' : r.unit === 'week' ? 'нед.' : 'мес.'
+    return `Каждые ${r.interval} ${u}`
+  } catch { return '' }
+}
+
+function ruleFromPreset(preset: string, customInterval: number, customUnit: string): string | null {
+  if (preset === 'none') return null
+  if (preset === 'daily')   return JSON.stringify({ unit: 'day',   interval: 1 })
+  if (preset === 'weekly')  return JSON.stringify({ unit: 'week',  interval: 1 })
+  if (preset === 'monthly') return JSON.stringify({ unit: 'month', interval: 1 })
+  if (preset === 'custom')  return JSON.stringify({ unit: customUnit, interval: Math.max(1, customInterval) })
+  return null
+}
+
 // ── Deadline helpers ──────────────────────────────────────────────────────────
 
-/** Start-of-day Date in local timezone. */
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
-/** Days between two start-of-day values (can be negative). */
 function daysDiff(due: Date): number {
   const today = startOfDay(new Date())
   const dueDay = startOfDay(due)
@@ -66,14 +96,6 @@ function formatDueLabel(due: string | null, urgency: DueUrgency): string {
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
-/**
- * Sort order:
- *  0 – overdue (closest overdue first, i.e. least negative diff)
- *  1 – upcoming ≤ 3 days (soonest first)
- *  2 – future > 3 days (soonest first)
- *  3 – no deadline (by created_at desc)
- *  4 – done (by created_at desc)
- */
 function sortTasks(tasks: Task[]): Task[] {
   return [...tasks].sort((a, b) => {
     const urgencyRank = (t: Task): number => {
@@ -89,8 +111,6 @@ function sortTasks(tasks: Task[]): Task[] {
     const rb = urgencyRank(b)
     if (ra !== rb) return ra - rb
 
-    // Within the same urgency group: sort by due_date asc (groups 0-2),
-    // or by created_at desc (groups 3-4)
     if (ra <= 2 && a.due_date && b.due_date) {
       return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0
     }
@@ -101,19 +121,31 @@ function sortTasks(tasks: Task[]): Task[] {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function TaskList({
-  subject, tasks, selectedTaskId,
-  onSelectTask, onCreateTask, onUpdateTask, onDeleteTask,
+  subject, tasks, allTags, selectedTaskId,
+  onSelectTask, onCreateTask, onUpdateTask, onDeleteTask, onCompleteRecurring,
 }: Props) {
-  const [showModal, setShowModal] = useState(false)
-  const [title, setTitle]         = useState('')
-  const [desc, setDesc]           = useState('')
-  const [status, setStatus]       = useState<TaskStatus>('not_started')
-  const [priority, setPriority]   = useState<TaskPriority>('medium')
-  const [dueDate, setDueDate]     = useState('')
-  const [saving, setSaving]       = useState(false)
+  // ── Create modal state ────────────────────────────────────────────────────
+  const [showModal, setShowModal]     = useState(false)
+  const [title, setTitle]             = useState('')
+  const [desc, setDesc]               = useState('')
+  const [status, setStatus]           = useState<TaskStatus>('not_started')
+  const [priority, setPriority]       = useState<TaskPriority>('medium')
+  const [dueDate, setDueDate]         = useState('')
+  const [recPreset, setRecPreset]     = useState('none')
+  const [recInterval, setRecInterval] = useState(1)
+  const [recUnit, setRecUnit]         = useState('day')
+  const [saving, setSaving]           = useState(false)
+
+  // ── Search & filter state ─────────────────────────────────────────────────
+  const [search, setSearch]               = useState('')
+  const [filterStatus, setFilterStatus]   = useState('all')
+  const [filterPriority, setFilterPriority] = useState('all')
+  const [filterTag, setFilterTag]         = useState('all')
+  const [filterDeadline, setFilterDeadline] = useState('all')
 
   function openModal() {
     setTitle(''); setDesc(''); setStatus('not_started'); setPriority('medium'); setDueDate('')
+    setRecPreset('none'); setRecInterval(1); setRecUnit('day')
     setShowModal(true)
   }
 
@@ -124,13 +156,16 @@ export default function TaskList({
     if (!title.trim() || !subject) return
     setSaving(true)
     try {
+      const recurrence_rule = ruleFromPreset(recPreset, recInterval, recUnit)
       await onCreateTask({
-        subject_id:  subject.id,
-        title:       title.trim(),
-        description: desc.trim() || null,
+        subject_id:       subject.id,
+        title:            title.trim(),
+        description:      desc.trim() || null,
         status,
         priority,
-        due_date: dueDate || null,
+        due_date:         dueDate || null,
+        recurrence_rule,
+        recurrence_parent_id: null,
       })
       closeModal()
     } finally {
@@ -145,13 +180,60 @@ export default function TaskList({
       in_progress: 'done',
       done:        'not_started',
     }
-    onUpdateTask(task.id, { status: next[task.status] })
+    const nextStatus = next[task.status]
+    if (nextStatus === 'done' && task.recurrence_rule) {
+      onCompleteRecurring(task.id)
+    } else {
+      onUpdateTask(task.id, { status: nextStatus })
+    }
   }
 
   const statusIcons: Record<TaskStatus, string> = {
     not_started: '',
     in_progress: '◐',
     done:        '✓',
+  }
+
+  // ── Filtering ─────────────────────────────────────────────────────────────
+  const hasFilters = search || filterStatus !== 'all' || filterPriority !== 'all' || filterTag !== 'all' || filterDeadline !== 'all'
+
+  const filtered = useMemo(() => {
+    let result = tasks
+
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      result = result.filter((t) =>
+        t.title.toLowerCase().includes(q) ||
+        (t.description ?? '').toLowerCase().includes(q)
+      )
+    }
+    if (filterStatus !== 'all')
+      result = result.filter((t) => t.status === filterStatus)
+    if (filterPriority !== 'all')
+      result = result.filter((t) => t.priority === filterPriority)
+    if (filterTag !== 'all')
+      result = result.filter((t) => (t.tags ?? []).some((tag) => tag.id === Number(filterTag)))
+    if (filterDeadline === 'overdue')
+      result = result.filter((t) => getDueUrgency(t.due_date, t.status) === 'overdue')
+    else if (filterDeadline === 'upcoming')
+      result = result.filter((t) => getDueUrgency(t.due_date, t.status) === 'upcoming')
+    else if (filterDeadline === 'none')
+      result = result.filter((t) => !t.due_date)
+    else if (filterDeadline === 'has')
+      result = result.filter((t) => !!t.due_date)
+
+    return result
+  }, [tasks, search, filterStatus, filterPriority, filterTag, filterDeadline])
+
+  const sorted = sortTasks(filtered)
+
+  // Header badges computed from full tasks array
+  const overdueCount  = tasks.filter((t) => getDueUrgency(t.due_date, t.status) === 'overdue').length
+  const upcomingCount = tasks.filter((t) => getDueUrgency(t.due_date, t.status) === 'upcoming').length
+
+  function clearFilters() {
+    setSearch(''); setFilterStatus('all'); setFilterPriority('all')
+    setFilterTag('all'); setFilterDeadline('all')
   }
 
   if (!subject) {
@@ -163,12 +245,6 @@ export default function TaskList({
       </div>
     )
   }
-
-  const sorted = sortTasks(tasks)
-
-  // Counts for header badge
-  const overdueCount  = tasks.filter((t) => getDueUrgency(t.due_date, t.status) === 'overdue').length
-  const upcomingCount = tasks.filter((t) => getDueUrgency(t.due_date, t.status) === 'upcoming').length
 
   return (
     <>
@@ -197,12 +273,56 @@ export default function TaskList({
         </div>
       </div>
 
+      {/* Search + Filter bar */}
+      <div className="search-filter-bar">
+        <input
+          className="search-input"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Поиск по заданиям…"
+        />
+        <div className="filter-row">
+          <select className="filter-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            <option value="all">Все статусы</option>
+            <option value="not_started">Не начато</option>
+            <option value="in_progress">В процессе</option>
+            <option value="done">Выполнено</option>
+          </select>
+          <select className="filter-select" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
+            <option value="all">Все приоритеты</option>
+            <option value="low">Низкий</option>
+            <option value="medium">Средний</option>
+            <option value="high">Высокий</option>
+          </select>
+          <select className="filter-select" value={filterTag} onChange={(e) => setFilterTag(e.target.value)}>
+            <option value="all">Все теги</option>
+            {allTags.map((tag) => (
+              <option key={tag.id} value={tag.id}>{tag.name}</option>
+            ))}
+          </select>
+          <select className="filter-select" value={filterDeadline} onChange={(e) => setFilterDeadline(e.target.value)}>
+            <option value="all">Любой дедлайн</option>
+            <option value="overdue">Просрочено</option>
+            <option value="upcoming">Скоро (≤3 дн.)</option>
+            <option value="has">Есть дедлайн</option>
+            <option value="none">Без дедлайна</option>
+          </select>
+          {hasFilters && (
+            <button className="btn btn-ghost btn-sm" onClick={clearFilters} title="Сбросить фильтры">✕</button>
+          )}
+        </div>
+      </div>
+
       <div className="task-list">
         {sorted.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">✅</div>
-            <div className="empty-state-title">Заданий нет</div>
-            <div className="empty-state-desc">Добавьте первое задание, нажав кнопку «+ Задание»</div>
+            <div className="empty-state-icon">{hasFilters ? '🔍' : '✅'}</div>
+            <div className="empty-state-title">{hasFilters ? 'Ничего не найдено' : 'Заданий нет'}</div>
+            <div className="empty-state-desc">
+              {hasFilters
+                ? 'Попробуйте изменить критерии поиска или фильтры'
+                : 'Добавьте первое задание, нажав кнопку «+ Задание»'}
+            </div>
           </div>
         ) : (
           sorted.map((t) => {
@@ -232,7 +352,12 @@ export default function TaskList({
                 </button>
 
                 <div className="task-item-body">
-                  <div className="task-item-title">{t.title}</div>
+                  <div className="task-item-title">
+                    {t.recurrence_rule && (
+                      <span className="recurrence-icon" title={formatRecurrence(t.recurrence_rule)}>↻</span>
+                    )}
+                    {t.title}
+                  </div>
                   <div className="task-item-meta">
                     <span className={`badge badge-${t.status}`}>{STATUS_LABELS[t.status]}</span>
                     <span className={`priority-dot priority-${t.priority}`}>{PRIORITY_LABELS[t.priority]}</span>
@@ -242,6 +367,19 @@ export default function TaskList({
                       </span>
                     )}
                   </div>
+                  {(t.tags ?? []).length > 0 && (
+                    <div className="tag-pill-row" style={{ marginTop: 5 }}>
+                      {(t.tags ?? []).map((tag) => (
+                        <span
+                          key={tag.id}
+                          className="tag-pill"
+                          style={{ background: tag.color + '22', color: tag.color, borderColor: tag.color + '55' }}
+                        >
+                          {tag.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {(t.subtask_total ?? 0) > 0 && (
                     <div className="task-item-progress">
                       <div className="task-item-progress-track">
@@ -270,6 +408,7 @@ export default function TaskList({
         )}
       </div>
 
+      {/* Create task modal */}
       {showModal && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -332,6 +471,35 @@ export default function TaskList({
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
                   />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Повторение ↻</label>
+                  <select className="form-select" value={recPreset} onChange={(e) => setRecPreset(e.target.value)}>
+                    <option value="none">Без повторения</option>
+                    <option value="daily">Ежедневно</option>
+                    <option value="weekly">Еженедельно</option>
+                    <option value="monthly">Ежемесячно</option>
+                    <option value="custom">Свой интервал</option>
+                  </select>
+                  {recPreset === 'custom' && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                      <input
+                        className="form-input"
+                        type="number"
+                        min={1}
+                        max={365}
+                        value={recInterval}
+                        onChange={(e) => setRecInterval(Number(e.target.value))}
+                        style={{ width: 80 }}
+                      />
+                      <select className="form-select" value={recUnit} onChange={(e) => setRecUnit(e.target.value)}>
+                        <option value="day">дней</option>
+                        <option value="week">недель</option>
+                        <option value="month">месяцев</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               </div>
 

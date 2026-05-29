@@ -27,6 +27,7 @@ export default function SubjectList({ subjects, selectedSubjectId, onSelect, onC
   const [color, setColor]       = useState(COLORS[5])
   const [desc, setDesc]         = useState('')
   const [saving, setSaving]     = useState(false)
+  const [search, setSearch]     = useState('')
 
   function openCreate() {
     setName(''); setColor(COLORS[5]); setDesc('')
@@ -57,12 +58,25 @@ export default function SubjectList({ subjects, selectedSubjectId, onSelect, onC
     }
   }
 
+  const filtered = search.trim()
+    ? subjects.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
+    : subjects
+
   return (
     <>
       <div className="sidebar-section-label">Предметы</div>
 
+      <div style={{ padding: '0 8px 4px' }}>
+        <input
+          className="sidebar-search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Поиск предметов…"
+        />
+      </div>
+
       <div className="subjects-list">
-        {subjects.map((s) => (
+        {filtered.map((s) => (
           <div
             key={s.id}
             className={`subject-item${selectedSubjectId === s.id ? ' selected' : ''}`}
@@ -77,9 +91,9 @@ export default function SubjectList({ subjects, selectedSubjectId, onSelect, onC
           </div>
         ))}
 
-        {subjects.length === 0 && (
+        {filtered.length === 0 && (
           <div style={{ padding: '12px 10px', color: 'rgba(255,255,255,.25)', fontSize: 12 }}>
-            Нет предметов. Добавьте первый!
+            {search ? 'Ничего не найдено' : 'Нет предметов. Добавьте первый!'}
           </div>
         )}
       </div>

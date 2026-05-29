@@ -8,16 +8,17 @@ const api = {
     delete:  (id: number)                  => ipcRenderer.invoke('subjects:delete', id)
   },
   tasks: {
-    getBySubject: (subjectId: number)          => ipcRenderer.invoke('tasks:getBySubject', subjectId),
-    create:       (data: unknown)              => ipcRenderer.invoke('tasks:create', data),
-    update:       (id: number, data: unknown)  => ipcRenderer.invoke('tasks:update', id, data),
-    delete:       (id: number)                 => ipcRenderer.invoke('tasks:delete', id)
+    getBySubject:      (subjectId: number)         => ipcRenderer.invoke('tasks:getBySubject', subjectId),
+    create:            (data: unknown)             => ipcRenderer.invoke('tasks:create', data),
+    update:            (id: number, data: unknown) => ipcRenderer.invoke('tasks:update', id, data),
+    delete:            (id: number)                => ipcRenderer.invoke('tasks:delete', id),
+    completeRecurring: (id: number)                => ipcRenderer.invoke('tasks:completeRecurring', id)
   },
   attachments: {
-    getByTask: (taskId: number)                       => ipcRenderer.invoke('attachments:getByTask', taskId),
-    add:       (taskId: number, filePath: string)     => ipcRenderer.invoke('attachments:add', taskId, filePath),
-    delete:    (id: number)                           => ipcRenderer.invoke('attachments:delete', id),
-    open:      (id: number)                           => ipcRenderer.invoke('attachments:open', id)
+    getByTask: (taskId: number)                   => ipcRenderer.invoke('attachments:getByTask', taskId),
+    add:       (taskId: number, filePath: string) => ipcRenderer.invoke('attachments:add', taskId, filePath),
+    delete:    (id: number)                       => ipcRenderer.invoke('attachments:delete', id),
+    open:      (id: number)                       => ipcRenderer.invoke('attachments:open', id)
   },
   subtasks: {
     getByTask: (taskId: number)                                    => ipcRenderer.invoke('subtasks:getByTask', taskId),
@@ -25,6 +26,13 @@ const api = {
     update:    (id: number, data: { title?: string; is_done?: boolean }) => ipcRenderer.invoke('subtasks:update', id, data),
     delete:    (id: number)                                        => ipcRenderer.invoke('subtasks:delete', id),
     reorder:   (taskId: number, orderedIds: number[])              => ipcRenderer.invoke('subtasks:reorder', taskId, orderedIds)
+  },
+  tags: {
+    getAll:      ()                                                     => ipcRenderer.invoke('tags:getAll'),
+    create:      (name: string, color: string)                         => ipcRenderer.invoke('tags:create', name, color),
+    update:      (id: number, data: { name?: string; color?: string }) => ipcRenderer.invoke('tags:update', id, data),
+    delete:      (id: number)                                          => ipcRenderer.invoke('tags:delete', id),
+    setTaskTags: (taskId: number, tagIds: number[])                    => ipcRenderer.invoke('tags:setTaskTags', taskId, tagIds)
   },
   settings: {
     get: (key: string)                => ipcRenderer.invoke('settings:get', key),

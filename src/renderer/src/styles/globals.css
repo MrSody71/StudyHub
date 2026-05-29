@@ -1086,3 +1086,294 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-input); }
+
+/* ── Sidebar search ───────────────────────────────────────────────────────── */
+.sidebar-search {
+  width: 100%;
+  padding: 5px 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,.06);
+  color: var(--text-sidebar-h);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.sidebar-search::placeholder { color: rgba(255,255,255,.25); }
+.sidebar-search:focus { border-color: rgba(79,70,229,.6); background: rgba(255,255,255,.1); }
+
+/* ── Task list search + filter bar ───────────────────────────────────────── */
+.search-filter-bar {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+  background: var(--bg-panel);
+}
+
+.search-input {
+  width: 100%;
+  padding: 7px 12px;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.search-input:focus { border-color: var(--border-focus); }
+.search-input::placeholder { color: var(--text-tertiary); }
+
+.filter-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11.5px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+  appearance: none;
+  min-width: 0;
+}
+
+.filter-select:focus { border-color: var(--border-focus); color: var(--text-primary); }
+
+/* ── Recurrence icon ─────────────────────────────────────────────────────── */
+.recurrence-icon {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 700;
+  margin-right: 4px;
+  vertical-align: middle;
+  opacity: .8;
+}
+
+/* ── Tag pills ───────────────────────────────────────────────────────────── */
+.tag-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+.tag-pill-removable { padding-right: 4px; }
+
+.tag-pill-del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+  color: inherit;
+  opacity: .6;
+  padding: 0 1px;
+  line-height: 1;
+  transition: opacity var(--transition);
+}
+
+.tag-pill-del:hover { opacity: 1; }
+
+.tag-add-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: none;
+  border: 1px dashed var(--border-input);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+  white-space: nowrap;
+}
+
+.tag-add-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
+/* ── Tag section in detail ───────────────────────────────────────────────── */
+.tag-section { position: relative; }
+
+/* ── Tag picker dropdown ─────────────────────────────────────────────────── */
+.tag-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 200px;
+  max-width: 260px;
+  background: var(--bg-modal);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.tag-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background var(--transition);
+}
+
+.tag-picker-item:hover { background: var(--bg-hover); }
+.tag-picker-item.assigned { background: var(--accent-light); }
+
+.tag-picker-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tag-picker-check {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.tag-picker-new {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  border-top: 1px solid var(--border);
+  transition: background var(--transition);
+  font-weight: 500;
+}
+
+.tag-picker-new:hover { background: var(--accent-light); }
+
+.tag-picker-create-form {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Tag create/edit shared ──────────────────────────────────────────────── */
+.tag-create-input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.tag-create-input:focus { border-color: var(--border-focus); }
+.tag-create-input::placeholder { color: var(--text-tertiary); }
+
+.tag-create-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tag-color-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform var(--transition), border-color var(--transition);
+  flex-shrink: 0;
+}
+
+.tag-color-dot:hover { transform: scale(1.2); }
+.tag-color-dot.selected { border-color: var(--text-primary); transform: scale(1.15); }
+
+/* ── Tag management in settings ──────────────────────────────────────────── */
+.tag-mgmt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.tag-mgmt-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.tag-mgmt-item:hover .subject-actions { opacity: 1; }
+
+.tag-mgmt-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tag-mgmt-name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tag-mgmt-create {
+  padding: 12px;
+  border: 1px dashed var(--border-input);
+  border-radius: var(--radius);
+  background: var(--bg-hover);
+}
+
+/* Settings modal — allow scroll for tag list */
+.settings-modal {
+  max-height: 90vh;
+  overflow-y: auto;
+}

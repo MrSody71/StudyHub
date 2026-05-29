@@ -1,11 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
-import type { Task, Attachment, Subtask, TaskStatus, TaskPriority } from '../types'
+import type { Task, Tag, Attachment, Subtask, TaskStatus, TaskPriority } from '../types'
+
+const TAG_COLORS = [
+  '#ef4444','#f97316','#eab308','#22c55e',
+  '#14b8a6','#3b82f6','#8b5cf6','#ec4899',
+]
 
 interface Props {
   task:                Task
   attachments:         Attachment[]
   subtasks:            Subtask[]
+  allTags:             Tag[]
   onUpdate:            (id: number, data: Partial<Omit<Task, 'id' | 'created_at' | 'subject_id'>>) => void
+  onCompleteRecurring: (taskId: number) => void
+  onSetTaskTags:       (taskId: number, tagIds: number[]) => Promise<void>
+  onCreateTag:         (name: string, color: string) => Promise<Tag>
   onAddAttachment:     (taskId: number) => void
   onDeleteAttachment:  (id: number) => void
   onOpenAttachment:    (id: number) => void
@@ -35,6 +44,40 @@ function fileIcon(mime: string): string {
   if (mime.includes('zip') || mime.includes('rar') || mime.includes('7z')) return '🗜'
   if (mime.startsWith('text/'))       return '📃'
   return '📎'
+}
+
+function formatRecurrence(rule: string | null | undefined): string {
+  if (!rule) return 'Без повторения'
+  try {
+    const r = JSON.parse(rule) as { unit: string; interval: number }
+    if (r.interval === 1) {
+      if (r.unit === 'day')   return 'Каждый день'
+      if (r.unit === 'week')  return 'Каждую неделю'
+      if (r.unit === 'month') return 'Каждый месяц'
+    }
+    const u = r.unit === 'day' ? 'дн.' : r.unit === 'week' ? 'нед.' : 'мес.'
+    return `Каждые ${r.interval} ${u}`
+  } catch { return 'Без повторения' }
+}
+
+function ruleFromPreset(preset: string, interval: number, unit: string): string | null {
+  if (preset === 'none')    return null
+  if (preset === 'daily')   return JSON.stringify({ unit: 'day',   interval: 1 })
+  if (preset === 'weekly')  return JSON.stringify({ unit: 'week',  interval: 1 })
+  if (preset === 'monthly') return JSON.stringify({ unit: 'month', interval: 1 })
+  if (preset === 'custom')  return JSON.stringify({ unit, interval: Math.max(1, interval) })
+  return null
+}
+
+function ruleToPreset(rule: string | null | undefined): string {
+  if (!rule) return 'none'
+  try {
+    const r = JSON.parse(rule) as { unit: string; interval: number }
+    if (r.unit === 'day'   && r.interval === 1) return 'daily'
+    if (r.unit === 'week'  && r.interval === 1) return 'weekly'
+    if (r.unit === 'month' && r.interval === 1) return 'monthly'
+    return 'custom'
+  } catch { return 'none' }
 }
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
@@ -109,10 +152,7 @@ function SubtaskItem({
       onDrop={onDrop}
       onDragEnd={onDragEnd}
     >
-      {/* Drag handle */}
       <span className="subtask-handle" title="Перетащить">⠿</span>
-
-      {/* Checkbox */}
       <button
         className={`subtask-checkbox${done ? ' checked' : ''}`}
         onClick={onToggle}
@@ -120,8 +160,6 @@ function SubtaskItem({
       >
         {done ? '✓' : ''}
       </button>
-
-      {/* Title / inline editor */}
       {editing ? (
         <input
           ref={inputRef}
@@ -141,8 +179,6 @@ function SubtaskItem({
           {subtask.title}
         </span>
       )}
-
-      {/* Delete */}
       <button className="subtask-del" onClick={onDelete} title="Удалить подзадачу">✕</button>
     </div>
   )
@@ -158,18 +194,11 @@ function ProgressBar({ total, done }: { total: number; done: number }) {
   return (
     <div className="subtask-progress">
       <div className="subtask-progress-header">
-        <span className="subtask-progress-label">
-          {done}/{total} выполнено
-        </span>
-        <span className={`subtask-progress-pct${allDone ? ' all-done' : ''}`}>
-          {pct}%
-        </span>
+        <span className="subtask-progress-label">{done}/{total} выполнено</span>
+        <span className={`subtask-progress-pct${allDone ? ' all-done' : ''}`}>{pct}%</span>
       </div>
       <div className="subtask-progress-track">
-        <div
-          className={`subtask-progress-fill${allDone ? ' all-done' : ''}`}
-          style={{ width: `${pct}%` }}
-        />
+        <div className={`subtask-progress-fill${allDone ? ' all-done' : ''}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   )
@@ -178,13 +207,13 @@ function ProgressBar({ total, done }: { total: number; done: number }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function TaskDetail({
-  task, attachments, subtasks,
-  onUpdate,
+  task, attachments, subtasks, allTags,
+  onUpdate, onCompleteRecurring, onSetTaskTags, onCreateTag,
   onAddAttachment, onDeleteAttachment, onOpenAttachment,
   onCreateSubtask, onUpdateSubtask, onDeleteSubtask, onReorderSubtasks,
   onClose,
 }: Props) {
-  // ── Task title / description editing ──────────────────────────────────────
+  // ── Title / description editing ───────────────────────────────────────────
   const [title, setTitle]           = useState(task.title)
   const [desc, setDesc]             = useState(task.description ?? '')
   const [titleDirty, setTitleDirty] = useState(false)
@@ -216,7 +245,86 @@ export default function TaskDetail({
     }, 800)
   }
 
-  // ── New subtask input ──────────────────────────────────────────────────────
+  // ── Recurrence editing ────────────────────────────────────────────────────
+  const [recPreset, setRecPreset]     = useState(() => ruleToPreset(task.recurrence_rule))
+  const [recInterval, setRecInterval] = useState(() => {
+    if (!task.recurrence_rule) return 1
+    try { return (JSON.parse(task.recurrence_rule) as { interval: number }).interval } catch { return 1 }
+  })
+  const [recUnit, setRecUnit] = useState(() => {
+    if (!task.recurrence_rule) return 'day'
+    try { return (JSON.parse(task.recurrence_rule) as { unit: string }).unit } catch { return 'day' }
+  })
+
+  useEffect(() => {
+    setRecPreset(ruleToPreset(task.recurrence_rule))
+    if (task.recurrence_rule) {
+      try {
+        const r = JSON.parse(task.recurrence_rule) as { unit: string; interval: number }
+        setRecInterval(r.interval)
+        setRecUnit(r.unit)
+      } catch { /* keep defaults */ }
+    }
+  }, [task.id, task.recurrence_rule])
+
+  function handleRecurrenceChange(preset: string, interval?: number, unit?: string) {
+    const p = preset
+    const i = interval ?? recInterval
+    const u = unit ?? recUnit
+    if (preset !== 'custom') setRecPreset(p)
+    else { setRecPreset(p); if (interval !== undefined) setRecInterval(interval); if (unit !== undefined) setRecUnit(u) }
+    const rule = ruleFromPreset(p, i, u)
+    onUpdate(task.id, { recurrence_rule: rule })
+  }
+
+  // ── Status change (with recurrence awareness) ─────────────────────────────
+  function handleStatusChange(newStatus: TaskStatus) {
+    if (newStatus === 'done' && task.recurrence_rule) {
+      onCompleteRecurring(task.id)
+    } else {
+      onUpdate(task.id, { status: newStatus })
+    }
+  }
+
+  // ── Tags ──────────────────────────────────────────────────────────────────
+  const [tagPickerOpen, setTagPickerOpen] = useState(false)
+  const [newTagName, setNewTagName]       = useState('')
+  const [newTagColor, setNewTagColor]     = useState(TAG_COLORS[5])
+  const [creatingTag, setCreatingTag]     = useState(false)
+  const tagPickerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (tagPickerRef.current && !tagPickerRef.current.contains(e.target as Node)) {
+        setTagPickerOpen(false)
+        setCreatingTag(false)
+        setNewTagName('')
+      }
+    }
+    if (tagPickerOpen) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [tagPickerOpen])
+
+  const currentTagIds = (task.tags ?? []).map((t) => t.id)
+
+  async function handleToggleTag(tagId: number) {
+    const next = currentTagIds.includes(tagId)
+      ? currentTagIds.filter((id) => id !== tagId)
+      : [...currentTagIds, tagId]
+    await onSetTaskTags(task.id, next)
+  }
+
+  async function handleCreateTagInline() {
+    const name = newTagName.trim()
+    if (!name) return
+    const tag = await onCreateTag(name, newTagColor)
+    await onSetTaskTags(task.id, [...currentTagIds, tag.id])
+    setNewTagName('')
+    setNewTagColor(TAG_COLORS[5])
+    setCreatingTag(false)
+  }
+
+  // ── New subtask input ─────────────────────────────────────────────────────
   const [newSubtask, setNewSubtask] = useState('')
   const newSubtaskRef = useRef<HTMLInputElement>(null)
 
@@ -232,20 +340,15 @@ export default function TaskDetail({
     if (e.key === 'Enter') { e.preventDefault(); handleAddSubtask() }
   }
 
-  // ── Drag & drop ────────────────────────────────────────────────────────────
-  const [dragIdx, setDragIdx]     = useState<number | null>(null)
-  const [dragOver, setDragOver]   = useState<number | null>(null)
-
-  function handleDragStart(idx: number) {
-    setDragIdx(idx)
-  }
+  // ── Drag & drop ───────────────────────────────────────────────────────────
+  const [dragIdx, setDragIdx]   = useState<number | null>(null)
+  const [dragOver, setDragOver] = useState<number | null>(null)
 
   function handleDrop(dropIdx: number) {
     if (dragIdx === null || dragIdx === dropIdx) return
     const arr = [...subtasks]
     const [item] = arr.splice(dragIdx, 1)
     arr.splice(dropIdx, 0, item)
-    // Optimistic update: reorder locally, then persist
     onReorderSubtasks(task.id, arr.map((s) => s.id))
     setDragIdx(null)
     setDragOver(null)
@@ -283,7 +386,7 @@ export default function TaskDetail({
               <select
                 className="inline-select"
                 value={task.status}
-                onChange={(e) => onUpdate(task.id, { status: e.target.value as TaskStatus })}
+                onChange={(e) => handleStatusChange(e.target.value as TaskStatus)}
               >
                 {STATUS_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -313,6 +416,154 @@ export default function TaskDetail({
                 onChange={(e) => onUpdate(task.id, { due_date: e.target.value || null })}
               />
             </div>
+
+            <div className="detail-meta-item" style={{ gridColumn: 'span 2' }}>
+              <label>↻ Повторение</label>
+              <select
+                className="inline-select"
+                value={recPreset}
+                onChange={(e) => handleRecurrenceChange(e.target.value)}
+              >
+                <option value="none">Без повторения</option>
+                <option value="daily">Ежедневно</option>
+                <option value="weekly">Еженедельно</option>
+                <option value="monthly">Ежемесячно</option>
+                <option value="custom">Свой интервал</option>
+              </select>
+              {recPreset === 'custom' && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                  <input
+                    className="inline-select"
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={recInterval}
+                    style={{ width: 70 }}
+                    onChange={(e) => {
+                      const v = Number(e.target.value)
+                      setRecInterval(v)
+                      const rule = ruleFromPreset('custom', v, recUnit)
+                      onUpdate(task.id, { recurrence_rule: rule })
+                    }}
+                  />
+                  <select
+                    className="inline-select"
+                    value={recUnit}
+                    onChange={(e) => {
+                      setRecUnit(e.target.value)
+                      const rule = ruleFromPreset('custom', recInterval, e.target.value)
+                      onUpdate(task.id, { recurrence_rule: rule })
+                    }}
+                  >
+                    <option value="day">дней</option>
+                    <option value="week">недель</option>
+                    <option value="month">месяцев</option>
+                  </select>
+                </div>
+              )}
+              {task.recurrence_rule && (
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 3 }}>
+                  {formatRecurrence(task.recurrence_rule)} — при выполнении создаётся следующее задание
+                </div>
+              )}
+              {task.recurrence_parent_id && (
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 3 }}>
+                  Повторяющееся задание (экземпляр)
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Tags */}
+        <div>
+          <div className="detail-section-label" style={{ marginBottom: 8 }}>Теги</div>
+          <div className="tag-section" ref={tagPickerRef}>
+            <div className="tag-pill-row">
+              {(task.tags ?? []).map((tag) => (
+                <span
+                  key={tag.id}
+                  className="tag-pill tag-pill-removable"
+                  style={{ background: tag.color + '22', color: tag.color, borderColor: tag.color + '55' }}
+                >
+                  {tag.name}
+                  <button
+                    className="tag-pill-del"
+                    onClick={() => handleToggleTag(tag.id)}
+                    title="Убрать тег"
+                  >✕</button>
+                </span>
+              ))}
+              <button
+                className="tag-add-btn"
+                onClick={() => { setTagPickerOpen(!tagPickerOpen); setCreatingTag(false) }}
+              >
+                + тег
+              </button>
+            </div>
+
+            {tagPickerOpen && (
+              <div className="tag-picker">
+                {allTags.length === 0 && !creatingTag && (
+                  <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-tertiary)' }}>
+                    Нет тегов
+                  </div>
+                )}
+                {allTags.map((tag) => {
+                  const assigned = currentTagIds.includes(tag.id)
+                  return (
+                    <div
+                      key={tag.id}
+                      className={`tag-picker-item${assigned ? ' assigned' : ''}`}
+                      onClick={() => handleToggleTag(tag.id)}
+                    >
+                      <span className="tag-picker-dot" style={{ background: tag.color }} />
+                      <span style={{ flex: 1 }}>{tag.name}</span>
+                      {assigned && <span className="tag-picker-check">✓</span>}
+                    </div>
+                  )
+                })}
+
+                {creatingTag ? (
+                  <div className="tag-picker-create-form">
+                    <input
+                      className="tag-create-input"
+                      autoFocus
+                      value={newTagName}
+                      onChange={(e) => setNewTagName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleCreateTagInline() } }}
+                      placeholder="Название тега…"
+                      maxLength={40}
+                    />
+                    <div className="tag-create-colors">
+                      {TAG_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          className={`tag-color-dot${newTagColor === c ? ' selected' : ''}`}
+                          style={{ background: c }}
+                          onClick={() => setNewTagColor(c)}
+                        />
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => void handleCreateTagInline()} disabled={!newTagName.trim()}>
+                        Создать
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setCreatingTag(false); setNewTagName('') }}>
+                        Отмена
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="tag-picker-new"
+                    onClick={() => setCreatingTag(true)}
+                  >
+                    + Новый тег
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -330,7 +581,7 @@ export default function TaskDetail({
           />
         </div>
 
-        {/* ── Subtasks / checklist ─────────────────────────────────────────── */}
+        {/* Subtasks */}
         <div>
           <div className="detail-section-label" style={{ marginBottom: 8 }}>
             Подзадачи ({doneCnt}/{totalCnt})
@@ -349,7 +600,7 @@ export default function TaskDetail({
                   onToggle={() => onUpdateSubtask(s.id, { is_done: s.is_done !== 1 })}
                   onRename={(t) => onUpdateSubtask(s.id, { title: t })}
                   onDelete={() => onDeleteSubtask(s.id)}
-                  onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; handleDragStart(idx) }}
+                  onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setDragIdx(idx) }}
                   onDragOver={(e) => { e.preventDefault(); setDragOver(idx) }}
                   onDrop={(e) => { e.preventDefault(); handleDrop(idx) }}
                   onDragEnd={() => { setDragIdx(null); setDragOver(null) }}
@@ -358,7 +609,6 @@ export default function TaskDetail({
             </div>
           )}
 
-          {/* Add input */}
           <div className="subtask-add-row">
             <input
               ref={newSubtaskRef}

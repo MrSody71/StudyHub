@@ -1,4 +1,4 @@
-import type { Subject, Task, Attachment, Subtask } from '../renderer/src/types'
+import type { Subject, Task, Attachment, Subtask, Tag } from '../renderer/src/types'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
 
@@ -6,29 +6,37 @@ declare global {
   interface Window {
     api: {
       subjects: {
-        getAll:  ()                                                          => Promise<IpcResult<Subject[]>>
+        getAll:  ()                                                                => Promise<IpcResult<Subject[]>>
         create:  (data: { name: string; color: string; description?: string | null }) => Promise<IpcResult<Subject>>
         update:  (id: number, data: Partial<Omit<Subject, 'id' | 'created_at'>>) => Promise<IpcResult<Subject>>
-        delete:  (id: number)                                               => Promise<IpcResult<null>>
+        delete:  (id: number)                                                     => Promise<IpcResult<null>>
       }
       tasks: {
-        getBySubject: (subjectId: number)                                   => Promise<IpcResult<Task[]>>
-        create:       (data: Omit<Task, 'id' | 'created_at'>)              => Promise<IpcResult<Task>>
-        update:       (id: number, data: Partial<Omit<Task, 'id' | 'created_at' | 'subject_id'>>) => Promise<IpcResult<Task>>
-        delete:       (id: number)                                          => Promise<IpcResult<null>>
+        getBySubject:      (subjectId: number)                                        => Promise<IpcResult<Task[]>>
+        create:            (data: Omit<Task, 'id' | 'created_at' | 'tags' | 'subtask_total' | 'subtask_done'>) => Promise<IpcResult<Task>>
+        update:            (id: number, data: Partial<Omit<Task, 'id' | 'created_at' | 'subject_id' | 'tags' | 'subtask_total' | 'subtask_done'>>) => Promise<IpcResult<Task>>
+        delete:            (id: number)                                               => Promise<IpcResult<null>>
+        completeRecurring: (id: number)                                               => Promise<IpcResult<{ task: Task; spawned: Task | null }>>
       }
       attachments: {
-        getByTask: (taskId: number)                                         => Promise<IpcResult<Attachment[]>>
-        add:       (taskId: number, filePath: string)                       => Promise<IpcResult<Attachment>>
-        delete:    (id: number)                                             => Promise<IpcResult<null>>
-        open:      (id: number)                                             => Promise<IpcResult<null>>
+        getByTask: (taskId: number)                     => Promise<IpcResult<Attachment[]>>
+        add:       (taskId: number, filePath: string)   => Promise<IpcResult<Attachment>>
+        delete:    (id: number)                         => Promise<IpcResult<null>>
+        open:      (id: number)                         => Promise<IpcResult<null>>
       }
       subtasks: {
-        getByTask: (taskId: number)                                         => Promise<IpcResult<Subtask[]>>
-        create:    (taskId: number, title: string)                          => Promise<IpcResult<Subtask>>
+        getByTask: (taskId: number)                                          => Promise<IpcResult<Subtask[]>>
+        create:    (taskId: number, title: string)                           => Promise<IpcResult<Subtask>>
         update:    (id: number, data: { title?: string; is_done?: boolean }) => Promise<IpcResult<Subtask>>
-        delete:    (id: number)                                             => Promise<IpcResult<null>>
-        reorder:   (taskId: number, orderedIds: number[])                   => Promise<IpcResult<null>>
+        delete:    (id: number)                                              => Promise<IpcResult<null>>
+        reorder:   (taskId: number, orderedIds: number[])                    => Promise<IpcResult<null>>
+      }
+      tags: {
+        getAll:      ()                                                          => Promise<IpcResult<Tag[]>>
+        create:      (name: string, color: string)                              => Promise<IpcResult<Tag>>
+        update:      (id: number, data: { name?: string; color?: string })      => Promise<IpcResult<Tag>>
+        delete:      (id: number)                                               => Promise<IpcResult<null>>
+        setTaskTags: (taskId: number, tagIds: number[])                         => Promise<IpcResult<null>>
       }
       settings: {
         get: (key: string)                => Promise<IpcResult<string | null>>

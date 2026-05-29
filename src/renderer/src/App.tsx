@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { Subject, Task, Attachment, Subtask, Theme } from './types'
+import type { Subject, Task, Attachment, Subtask, Tag, Theme } from './types'
 import SubjectList from './components/SubjectList'
 import TaskList from './components/TaskList'
 import TaskDetail from './components/TaskDetail'
@@ -17,6 +17,7 @@ export default function App() {
   const [theme, setTheme]                   = useState<Theme>('light')
   const [subjects, setSubjects]             = useState<Subject[]>([])
   const [tasks, setTasks]                   = useState<Task[]>([])
+  const [tags, setTags]                     = useState<Tag[]>([])
   const [attachments, setAttachments]       = useState<Attachment[]>([])
   const [subtasks, setSubtasks]             = useState<Subtask[]>([])
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
@@ -27,7 +28,7 @@ export default function App() {
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null
   const selectedTask    = tasks.find((t) => t.id === selectedTaskId) ?? null
 
-  useEffect(() => { void loadSubjects(); void loadTheme() }, [])
+  useEffect(() => { void loadSubjects(); void loadTheme(); void loadTags() }, [])
 
   useEffect(() => {
     setSelectedTaskId(null)
@@ -66,6 +67,11 @@ export default function App() {
     catch (e) { setError(String(e)) }
   }
 
+  async function loadTags() {
+    try { setTags(await unwrap(window.api.tags.getAll())) }
+    catch (e) { setError(String(e)) }
+  }
+
   async function loadAttachments(taskId: number) {
     try { setAttachments(await unwrap(window.api.attachments.getByTask(taskId))) }
     catch (e) { setError(String(e)) }
@@ -76,8 +82,6 @@ export default function App() {
     catch (e) { setError(String(e)) }
   }
 
-  // After any subtask mutation, refresh both the subtask list AND the task list
-  // so progress counts in the center panel stay in sync.
   async function refreshSubtasks(taskId: number) {
     await loadSubtasks(taskId)
     if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
@@ -121,6 +125,14 @@ export default function App() {
     if (selectedTaskId === id) setSelectedTaskId(null)
   }
 
+  async function handleCompleteRecurring(id: number) {
+    const result = await unwrap(window.api.tasks.completeRecurring(id))
+    setTasks((prev) => {
+      const updated = prev.map((t) => t.id === id ? { ...t, ...result.task } : t)
+      return result.spawned ? [result.spawned, ...updated] : updated
+    })
+  }
+
   // ── Attachment handlers ──────────────────────────────────────────────────
   async function handleAddAttachment(taskId: number) {
     const filePath = await unwrap(window.api.dialog.openFile())
@@ -162,8 +174,32 @@ export default function App() {
 
   async function handleReorderSubtasks(taskId: number, orderedIds: number[]) {
     await unwrap(window.api.subtasks.reorder(taskId, orderedIds))
-    // Update local order to match
     if (selectedTaskId !== null) await loadSubtasks(selectedTaskId)
+  }
+
+  // ── Tag handlers ─────────────────────────────────────────────────────────
+  async function handleCreateTag(name: string, color: string): Promise<Tag> {
+    const tag = await unwrap(window.api.tags.create(name, color))
+    setTags((prev) => [...prev, tag])
+    return tag
+  }
+
+  async function handleUpdateTag(id: number, data: { name?: string; color?: string }) {
+    const tag = await unwrap(window.api.tags.update(id, data))
+    setTags((prev) => prev.map((t) => t.id === id ? tag : t))
+    // Refresh tasks so tag pills update in the list
+    if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
+  }
+
+  async function handleDeleteTag(id: number) {
+    await unwrap(window.api.tags.delete(id))
+    setTags((prev) => prev.filter((t) => t.id !== id))
+    if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
+  }
+
+  async function handleSetTaskTags(taskId: number, tagIds: number[]) {
+    await unwrap(window.api.tags.setTaskTags(taskId, tagIds))
+    if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
   }
 
   async function handleThemeChange(t: Theme) {
@@ -202,11 +238,13 @@ export default function App() {
         <TaskList
           subject={selectedSubject}
           tasks={tasks}
+          allTags={tags}
           selectedTaskId={selectedTaskId}
           onSelectTask={setSelectedTaskId}
           onCreateTask={handleCreateTask}
           onDeleteTask={handleDeleteTask}
           onUpdateTask={handleUpdateTask}
+          onCompleteRecurring={handleCompleteRecurring}
         />
       </div>
 
@@ -216,7 +254,11 @@ export default function App() {
             task={selectedTask}
             attachments={attachments}
             subtasks={subtasks}
+            allTags={tags}
             onUpdate={handleUpdateTask}
+            onCompleteRecurring={handleCompleteRecurring}
+            onSetTaskTags={handleSetTaskTags}
+            onCreateTag={handleCreateTag}
             onAddAttachment={handleAddAttachment}
             onDeleteAttachment={handleDeleteAttachment}
             onOpenAttachment={handleOpenAttachment}
@@ -232,7 +274,11 @@ export default function App() {
       {showSettings && (
         <SettingsPanel
           theme={theme}
+          tags={tags}
           onThemeChange={handleThemeChange}
+          onCreateTag={handleCreateTag}
+          onUpdateTag={handleUpdateTag}
+          onDeleteTag={handleDeleteTag}
           onClose={() => setShowSettings(false)}
         />
       )}
