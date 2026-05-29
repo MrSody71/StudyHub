@@ -23,17 +23,87 @@ const PRIORITY_LABELS: Record<TaskPriority, string> = {
   high:   'Высокий',
 }
 
-function isOverdue(due: string | null): boolean {
-  if (!due) return false
-  return new Date(due) < new Date(new Date().toDateString())
+// ── Deadline helpers ──────────────────────────────────────────────────────────
+
+/** Start-of-day Date in local timezone. */
+function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
-function formatDate(due: string | null): string {
+/** Days between two start-of-day values (can be negative). */
+function daysDiff(due: Date): number {
+  const today = startOfDay(new Date())
+  const dueDay = startOfDay(due)
+  return Math.round((dueDay.getTime() - today.getTime()) / 86_400_000)
+}
+
+type DueUrgency = 'overdue' | 'upcoming' | 'normal' | 'none'
+
+function getDueUrgency(due: string | null, status: TaskStatus): DueUrgency {
+  if (!due || status === 'done') return 'none'
+  const diff = daysDiff(new Date(due))
+  if (diff < 0)  return 'overdue'
+  if (diff <= 3) return 'upcoming'
+  return 'normal'
+}
+
+function formatDueLabel(due: string | null, urgency: DueUrgency): string {
   if (!due) return ''
-  return new Date(due).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+  const diff = urgency === 'overdue' || urgency === 'upcoming'
+    ? daysDiff(new Date(due))
+    : null
+
+  const dateStr = new Date(due).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+
+  if (urgency === 'overdue') return `⚠ ${dateStr} (просрочено)`
+  if (urgency === 'upcoming') {
+    if (diff === 0) return '🔴 Сегодня'
+    if (diff === 1) return '🟠 Завтра'
+    return `🟡 Через ${diff} ${diff === 2 ? 'дня' : 'дня'}`
+  }
+  return `📅 ${dateStr}`
 }
 
-export default function TaskList({ subject, tasks, selectedTaskId, onSelectTask, onCreateTask, onUpdateTask, onDeleteTask }: Props) {
+// ── Sort ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Sort order:
+ *  0 – overdue (closest overdue first, i.e. least negative diff)
+ *  1 – upcoming ≤ 3 days (soonest first)
+ *  2 – future > 3 days (soonest first)
+ *  3 – no deadline (by created_at desc)
+ *  4 – done (by created_at desc)
+ */
+function sortTasks(tasks: Task[]): Task[] {
+  return [...tasks].sort((a, b) => {
+    const urgencyRank = (t: Task): number => {
+      if (t.status === 'done') return 4
+      const u = getDueUrgency(t.due_date, t.status)
+      if (u === 'overdue')  return 0
+      if (u === 'upcoming') return 1
+      if (u === 'normal')   return 2
+      return 3
+    }
+
+    const ra = urgencyRank(a)
+    const rb = urgencyRank(b)
+    if (ra !== rb) return ra - rb
+
+    // Within the same urgency group: sort by due_date asc (groups 0-2),
+    // or by created_at desc (groups 3-4)
+    if (ra <= 2 && a.due_date && b.due_date) {
+      return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0
+    }
+    return a.created_at > b.created_at ? -1 : 1
+  })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function TaskList({
+  subject, tasks, selectedTaskId,
+  onSelectTask, onCreateTask, onUpdateTask, onDeleteTask,
+}: Props) {
   const [showModal, setShowModal] = useState(false)
   const [title, setTitle]         = useState('')
   const [desc, setDesc]           = useState('')
@@ -60,7 +130,7 @@ export default function TaskList({ subject, tasks, selectedTaskId, onSelectTask,
         description: desc.trim() || null,
         status,
         priority,
-        due_date:    dueDate || null,
+        due_date: dueDate || null,
       })
       closeModal()
     } finally {
@@ -94,6 +164,12 @@ export default function TaskList({ subject, tasks, selectedTaskId, onSelectTask,
     )
   }
 
+  const sorted = sortTasks(tasks)
+
+  // Counts for header badge
+  const overdueCount  = tasks.filter((t) => getDueUrgency(t.due_date, t.status) === 'overdue').length
+  const upcomingCount = tasks.filter((t) => getDueUrgency(t.due_date, t.status) === 'upcoming').length
+
   return (
     <>
       <div className="panel-header">
@@ -103,6 +179,16 @@ export default function TaskList({ subject, tasks, selectedTaskId, onSelectTask,
           <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-secondary)' }}>
             {tasks.length} {tasks.length === 1 ? 'задание' : tasks.length < 5 ? 'задания' : 'заданий'}
           </span>
+          {overdueCount > 0 && (
+            <span className="deadline-badge deadline-badge-overdue" title="Просрочено">
+              {overdueCount} просрочено
+            </span>
+          )}
+          {overdueCount === 0 && upcomingCount > 0 && (
+            <span className="deadline-badge deadline-badge-upcoming" title="Срок скоро">
+              {upcomingCount} скоро
+            </span>
+          )}
         </div>
         <div className="panel-actions">
           <button className="btn btn-primary btn-sm" onClick={openModal}>
@@ -112,50 +198,62 @@ export default function TaskList({ subject, tasks, selectedTaskId, onSelectTask,
       </div>
 
       <div className="task-list">
-        {tasks.length === 0 ? (
+        {sorted.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">✅</div>
             <div className="empty-state-title">Заданий нет</div>
             <div className="empty-state-desc">Добавьте первое задание, нажав кнопку «+ Задание»</div>
           </div>
         ) : (
-          tasks.map((t) => (
-            <div
-              key={t.id}
-              className={`task-item${selectedTaskId === t.id ? ' selected' : ''}${t.status === 'done' ? ' done' : ''}`}
-              onClick={() => onSelectTask(t.id)}
-            >
-              <button
-                className={`task-status-icon ${t.status}`}
-                onClick={(e) => cycleStatus(e, t)}
-                title="Изменить статус"
-              >
-                {statusIcons[t.status]}
-              </button>
+          sorted.map((t) => {
+            const urgency = getDueUrgency(t.due_date, t.status)
+            const dueLabel = formatDueLabel(t.due_date, urgency)
 
-              <div className="task-item-body">
-                <div className="task-item-title">{t.title}</div>
-                <div className="task-item-meta">
-                  <span className={`badge badge-${t.status}`}>{STATUS_LABELS[t.status]}</span>
-                  <span className={`priority-dot priority-${t.priority}`}>{PRIORITY_LABELS[t.priority]}</span>
-                  {t.due_date && (
-                    <span className={`due-date${isOverdue(t.due_date) && t.status !== 'done' ? ' overdue' : ''}`}>
-                      📅 {formatDate(t.due_date)}
-                      {isOverdue(t.due_date) && t.status !== 'done' && ' (просрочено)'}
-                    </span>
-                  )}
+            const itemClass = [
+              'task-item',
+              selectedTaskId === t.id ? 'selected'  : '',
+              t.status === 'done'     ? 'done'       : '',
+              urgency === 'overdue'   ? 'overdue'    : '',
+              urgency === 'upcoming'  ? 'upcoming'   : '',
+            ].filter(Boolean).join(' ')
+
+            return (
+              <div
+                key={t.id}
+                className={itemClass}
+                onClick={() => onSelectTask(t.id)}
+              >
+                <button
+                  className={`task-status-icon ${t.status}`}
+                  onClick={(e) => cycleStatus(e, t)}
+                  title="Изменить статус"
+                >
+                  {statusIcons[t.status]}
+                </button>
+
+                <div className="task-item-body">
+                  <div className="task-item-title">{t.title}</div>
+                  <div className="task-item-meta">
+                    <span className={`badge badge-${t.status}`}>{STATUS_LABELS[t.status]}</span>
+                    <span className={`priority-dot priority-${t.priority}`}>{PRIORITY_LABELS[t.priority]}</span>
+                    {dueLabel && (
+                      <span className={`due-date${urgency !== 'none' && urgency !== 'normal' ? ` due-${urgency}` : ''}`}>
+                        {dueLabel}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <button
-                className="task-delete-btn"
-                onClick={(e) => { e.stopPropagation(); onDeleteTask(t.id) }}
-                title="Удалить задание"
-              >
-                🗑
-              </button>
-            </div>
-          ))
+                <button
+                  className="task-delete-btn"
+                  onClick={(e) => { e.stopPropagation(); onDeleteTask(t.id) }}
+                  title="Удалить задание"
+                >
+                  🗑
+                </button>
+              </div>
+            )
+          })
         )}
       </div>
 

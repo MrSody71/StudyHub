@@ -2,8 +2,13 @@ import { app, BrowserWindow, shell } from 'electron'
 import path from 'path'
 import { initDatabase, closeDatabase } from './db/database'
 import { setupIpcHandlers } from './ipc/handlers'
+import { startNotificationScheduler } from './notifications'
 
 app.setName('StudyHub')
+// Required on Windows for system notifications to appear correctly
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.studyhub.app')
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -47,6 +52,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   initDatabase()
   setupIpcHandlers()
+  startNotificationScheduler()
   createWindow()
 
   app.on('activate', () => {

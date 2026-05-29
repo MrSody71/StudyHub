@@ -432,7 +432,43 @@ body {
   gap: 3px;
 }
 
-.due-date.overdue { color: var(--danger); font-weight: 600; }
+.due-date.due-overdue  { color: var(--danger);  font-weight: 600; }
+.due-date.due-upcoming { color: var(--warning);  font-weight: 600; }
+
+/* ── Overdue task row ────────────────────────────────────────────────────── */
+.task-item.overdue:not(.selected) {
+  border-left: 3px solid var(--danger);
+  padding-left: 11px;
+  background: var(--danger-light);
+}
+
+.task-item.overdue:not(.selected):hover {
+  border-color: var(--danger-hover);
+}
+
+/* ── Upcoming task row (deadline ≤ 3 days) ──────────────────────────────── */
+.task-item.upcoming:not(.selected) {
+  border-left: 3px solid var(--warning);
+  padding-left: 11px;
+  background: var(--warning-light);
+}
+
+.task-item.upcoming:not(.selected):hover {
+  border-color: var(--warning);
+}
+
+/* ── Header deadline badge ──────────────────────────────────────────────── */
+.deadline-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.deadline-badge-overdue  { background: var(--danger-light);  color: var(--danger);  }
+.deadline-badge-upcoming { background: var(--warning-light); color: var(--warning); }
 
 /* Empty state */
 .empty-state {
