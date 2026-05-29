@@ -11,14 +11,26 @@ export interface Subject {
 }
 
 export interface Task {
-  id:          number
-  subject_id:  number
-  title:       string
-  description: string | null
-  status:      TaskStatus
-  priority:    TaskPriority
-  due_date:    string | null
-  created_at:  string
+  id:             number
+  subject_id:     number
+  title:          string
+  description:    string | null
+  status:         TaskStatus
+  priority:       TaskPriority
+  due_date:       string | null
+  created_at:     string
+  // Aggregated from subtasks — present in getBySubject queries
+  subtask_total?: number
+  subtask_done?:  number
+}
+
+export interface Subtask {
+  id:         number
+  task_id:    number
+  title:      string
+  is_done:    number   // 0 | 1  (SQLite boolean)
+  sort_order: number
+  created_at: string
 }
 
 export interface Attachment {

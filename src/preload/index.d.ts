@@ -1,4 +1,4 @@
-import type { Subject, Task, Attachment } from '../renderer/src/types'
+import type { Subject, Task, Attachment, Subtask } from '../renderer/src/types'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
 
@@ -22,6 +22,13 @@ declare global {
         add:       (taskId: number, filePath: string)                       => Promise<IpcResult<Attachment>>
         delete:    (id: number)                                             => Promise<IpcResult<null>>
         open:      (id: number)                                             => Promise<IpcResult<null>>
+      }
+      subtasks: {
+        getByTask: (taskId: number)                                         => Promise<IpcResult<Subtask[]>>
+        create:    (taskId: number, title: string)                          => Promise<IpcResult<Subtask>>
+        update:    (id: number, data: { title?: string; is_done?: boolean }) => Promise<IpcResult<Subtask>>
+        delete:    (id: number)                                             => Promise<IpcResult<null>>
+        reorder:   (taskId: number, orderedIds: number[])                   => Promise<IpcResult<null>>
       }
       settings: {
         get: (key: string)                => Promise<IpcResult<string | null>>

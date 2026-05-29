@@ -9,6 +9,22 @@ interface Migration {
 // Never modify existing migrations; always add a new one.
 const migrations: Migration[] = [
   {
+    version: 2,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS subtasks (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          task_id    INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          title      TEXT    NOT NULL,
+          is_done    INTEGER NOT NULL DEFAULT 0 CHECK (is_done IN (0, 1)),
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_subtasks_task_id ON subtasks(task_id);
+      `)
+    }
+  },
+  {
     version: 1,
     up: (db) => {
       db.exec(`

@@ -1,14 +1,16 @@
 import { getDb } from './database'
 
 export interface TaskRow {
-  id: number
-  subject_id: number
-  title: string
-  description: string | null
-  status: 'not_started' | 'in_progress' | 'done'
-  priority: 'low' | 'medium' | 'high'
-  due_date: string | null
-  created_at: string
+  id:             number
+  subject_id:     number
+  title:          string
+  description:    string | null
+  status:         'not_started' | 'in_progress' | 'done'
+  priority:       'low' | 'medium' | 'high'
+  due_date:       string | null
+  created_at:     string
+  subtask_total:  number
+  subtask_done:   number
 }
 
 export interface CreateTaskData {
@@ -30,7 +32,21 @@ export interface UpdateTaskData {
 
 export function getTasksBySubject(subjectId: number): TaskRow[] {
   return getDb()
-    .prepare('SELECT * FROM tasks WHERE subject_id = ? ORDER BY created_at DESC')
+    .prepare(`
+      SELECT t.*,
+             COALESCE(agg.total, 0) AS subtask_total,
+             COALESCE(agg.done,  0) AS subtask_done
+      FROM tasks t
+      LEFT JOIN (
+        SELECT task_id,
+               COUNT(*)    AS total,
+               SUM(is_done) AS done
+        FROM subtasks
+        GROUP BY task_id
+      ) agg ON agg.task_id = t.id
+      WHERE t.subject_id = ?
+      ORDER BY t.created_at DESC
+    `)
     .all(subjectId) as TaskRow[]
 }
 

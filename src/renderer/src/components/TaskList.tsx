@@ -242,6 +242,19 @@ export default function TaskList({
                       </span>
                     )}
                   </div>
+                  {(t.subtask_total ?? 0) > 0 && (
+                    <div className="task-item-progress">
+                      <div className="task-item-progress-track">
+                        <div
+                          className={`task-item-progress-fill${t.subtask_done === t.subtask_total ? ' all-done' : ''}`}
+                          style={{ width: `${Math.round(((t.subtask_done ?? 0) / (t.subtask_total ?? 1)) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="task-item-progress-label">
+                        {t.subtask_done ?? 0}/{t.subtask_total}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <button

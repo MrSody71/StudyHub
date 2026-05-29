@@ -19,6 +19,13 @@ const api = {
     delete:    (id: number)                           => ipcRenderer.invoke('attachments:delete', id),
     open:      (id: number)                           => ipcRenderer.invoke('attachments:open', id)
   },
+  subtasks: {
+    getByTask: (taskId: number)                                    => ipcRenderer.invoke('subtasks:getByTask', taskId),
+    create:    (taskId: number, title: string)                     => ipcRenderer.invoke('subtasks:create', taskId, title),
+    update:    (id: number, data: { title?: string; is_done?: boolean }) => ipcRenderer.invoke('subtasks:update', id, data),
+    delete:    (id: number)                                        => ipcRenderer.invoke('subtasks:delete', id),
+    reorder:   (taskId: number, orderedIds: number[])              => ipcRenderer.invoke('subtasks:reorder', taskId, orderedIds)
+  },
   settings: {
     get: (key: string)                => ipcRenderer.invoke('settings:get', key),
     set: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value)

@@ -7,6 +7,13 @@ import {
   deleteAttachment,
   openAttachment
 } from '../db/attachments'
+import {
+  getSubtasksByTask,
+  createSubtask,
+  updateSubtask,
+  deleteSubtask,
+  reorderSubtasks
+} from '../db/subtasks'
 import { getSetting, setSetting } from '../db/settings'
 
 function wrap<T>(fn: () => T): { success: true; data: T } | { success: false; error: string } {
@@ -63,6 +70,27 @@ export function setupIpcHandlers(): void {
 
   ipcMain.handle('attachments:open', (_e, id: number) =>
     wrap(() => { openAttachment(id); return null })
+  )
+
+  // ── Subtasks ──────────────────────────────────────────────────────────────
+  ipcMain.handle('subtasks:getByTask', (_e, taskId: number) =>
+    wrap(() => getSubtasksByTask(taskId))
+  )
+
+  ipcMain.handle('subtasks:create', (_e, taskId: number, title: string) =>
+    wrap(() => createSubtask(taskId, title))
+  )
+
+  ipcMain.handle('subtasks:update', (_e, id: number, data: { title?: string; is_done?: boolean }) =>
+    wrap(() => updateSubtask(id, data))
+  )
+
+  ipcMain.handle('subtasks:delete', (_e, id: number) =>
+    wrap(() => { deleteSubtask(id); return null })
+  )
+
+  ipcMain.handle('subtasks:reorder', (_e, taskId: number, orderedIds: number[]) =>
+    wrap(() => { reorderSubtasks(taskId, orderedIds); return null })
   )
 
   // ── Settings ──────────────────────────────────────────────────────────────
