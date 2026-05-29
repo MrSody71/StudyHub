@@ -15,6 +15,7 @@ import {
   getAllScheduleEntries, createScheduleEntry, updateScheduleEntry, deleteScheduleEntry
 } from '../db/schedule'
 import { createSession, getSessionStats } from '../db/sessions'
+import { getGradesBySubject, createGrade, updateGrade, deleteGrade, getSubjectGradeStats } from '../db/grades'
 
 function wrap<T>(fn: () => T): { success: true; data: T } | { success: false; error: string } {
   try {
@@ -66,6 +67,13 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('schedule:create',    (_e, data)                 => wrap(() => createScheduleEntry(data)))
   ipcMain.handle('schedule:update',    (_e, id: number, data)     => wrap(() => updateScheduleEntry(id, data)))
   ipcMain.handle('schedule:delete',    (_e, id: number)           => wrap(() => { deleteScheduleEntry(id); return null }))
+
+  // ── Grades ────────────────────────────────────────────────────────────────
+  ipcMain.handle('grades:getBySubject',  (_e, subjectId: number) => wrap(() => getGradesBySubject(subjectId)))
+  ipcMain.handle('grades:create',        (_e, data)             => wrap(() => createGrade(data)))
+  ipcMain.handle('grades:update',        (_e, id: number, data) => wrap(() => updateGrade(id, data)))
+  ipcMain.handle('grades:delete',        (_e, id: number)       => wrap(() => { deleteGrade(id); return null }))
+  ipcMain.handle('grades:getSubjectStats', ()                   => wrap(() => getSubjectGradeStats()))
 
   // ── Study sessions ────────────────────────────────────────────────────────
   ipcMain.handle('sessions:create', (_e, data) => wrap(() => createSession(data)))

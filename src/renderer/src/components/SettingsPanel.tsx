@@ -8,16 +8,18 @@ const TAG_COLORS = [
 ]
 
 interface Props {
-  theme:         Theme
-  tags:          Tag[]
-  onThemeChange: (t: Theme) => void
-  onCreateTag:   (name: string, color: string) => Promise<Tag>
-  onUpdateTag:   (id: number, data: { name?: string; color?: string }) => Promise<void>
-  onDeleteTag:   (id: number) => Promise<void>
-  onClose:       () => void
+  theme:              Theme
+  tags:               Tag[]
+  gradeScale:         number
+  onThemeChange:      (t: Theme) => void
+  onGradeScaleChange: (scale: number) => void
+  onCreateTag:        (name: string, color: string) => Promise<Tag>
+  onUpdateTag:        (id: number, data: { name?: string; color?: string }) => Promise<void>
+  onDeleteTag:        (id: number) => Promise<void>
+  onClose:            () => void
 }
 
-export default function SettingsPanel({ theme, tags, onThemeChange, onCreateTag, onUpdateTag, onDeleteTag, onClose }: Props) {
+export default function SettingsPanel({ theme, tags, gradeScale, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onClose }: Props) {
   // ── New tag form ────────────────────────────────────────────────────────
   const [newName, setNewName]   = useState('')
   const [newColor, setNewColor] = useState(TAG_COLORS[5])
@@ -97,6 +99,30 @@ export default function SettingsPanel({ theme, tags, onThemeChange, onCreateTag,
               >
                 🌙 Тёмная
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Grade scale section */}
+        <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>
+          <div className="settings-section-title">Шкала оценок</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
+              Максимальный балл
+            </label>
+            <div className="theme-toggle">
+              {[5, 10, 100].map((s) => (
+                <button
+                  key={s}
+                  className={`theme-option${gradeScale === s ? ' active' : ''}`}
+                  onClick={() => onGradeScaleChange(s)}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+              Задаёт отображение среднего балла. Оценки по-прежнему можно вводить в любом масштабе.
             </div>
           </div>
         </div>

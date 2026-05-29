@@ -66,6 +66,25 @@ export interface ScheduleEntry {
   created_at:  string
 }
 
+export interface Grade {
+  id:         number
+  subject_id: number
+  title:      string
+  value:      number
+  max_value:  number
+  weight:     number
+  date:       string | null
+  created_at: string
+}
+
+export interface SubjectGradeStat {
+  subject_id:    number
+  subject_name:  string
+  subject_color: string
+  weighted_avg:  number   // ratio 0–1
+  grade_count:   number
+}
+
 export type SessionType = 'pomodoro' | 'short_break' | 'long_break' | 'manual'
 
 export interface StudySession {

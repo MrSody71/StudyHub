@@ -139,6 +139,26 @@ const migrations: Migration[] = [
         INSERT OR IGNORE INTO settings (key, value) VALUES ('pomodoro.interval',   '4');
       `)
     }
+  },
+  {
+    version: 7,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS grades (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          subject_id  INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+          title       TEXT    NOT NULL,
+          value       REAL    NOT NULL,
+          max_value   REAL    NOT NULL DEFAULT 100,
+          weight      REAL    NOT NULL DEFAULT 1,
+          date        TEXT,
+          created_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_grades_subject ON grades(subject_id);
+
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('grades.scale', '100');
+      `)
+    }
   }
 ]
 

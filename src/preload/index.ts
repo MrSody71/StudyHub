@@ -41,6 +41,13 @@ const api = {
     update:  (id: number, data: unknown)   => ipcRenderer.invoke('schedule:update', id, data),
     delete:  (id: number)                  => ipcRenderer.invoke('schedule:delete', id)
   },
+  grades: {
+    getBySubject:    (subjectId: number)          => ipcRenderer.invoke('grades:getBySubject', subjectId),
+    create:          (data: unknown)              => ipcRenderer.invoke('grades:create', data),
+    update:          (id: number, data: unknown)  => ipcRenderer.invoke('grades:update', id, data),
+    delete:          (id: number)                 => ipcRenderer.invoke('grades:delete', id),
+    getSubjectStats: ()                           => ipcRenderer.invoke('grades:getSubjectStats')
+  },
   sessions: {
     create:   (data: unknown) => ipcRenderer.invoke('sessions:create', data),
     getStats: ()              => ipcRenderer.invoke('sessions:getStats')

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, Theme } from './types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, Grade, SubjectGradeStat, Theme } from './types'
 import SubjectList from './components/SubjectList'
 import TaskList from './components/TaskList'
 import TaskDetail from './components/TaskDetail'
+import GradeList from './components/GradeList'
 import WeeklySchedule from './components/WeeklySchedule'
 import MonthCalendar from './components/MonthCalendar'
 import PomodoroTimer from './components/PomodoroTimer'
@@ -11,7 +12,8 @@ import SettingsPanel from './components/SettingsPanel'
 import { usePomodoro } from './hooks/usePomodoro'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
-type AppView = 'tasks' | 'schedule' | 'calendar' | 'timer'
+type AppView    = 'tasks' | 'schedule' | 'calendar' | 'timer'
+type SubjectTab = 'tasks' | 'grades'
 
 async function unwrap<T>(p: Promise<IpcResult<T>>): Promise<T> {
   const r = await p
@@ -27,6 +29,10 @@ export default function App() {
   const [allDeadlineTasks, setAllDeadlineTasks] = useState<Task[]>([])
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([])
   const [tags, setTags]                     = useState<Tag[]>([])
+  const [grades, setGrades]                 = useState<Grade[]>([])
+  const [gradeStats, setGradeStats]         = useState<SubjectGradeStat[]>([])
+  const [gradeScale, setGradeScale]         = useState(100)
+  const [subjectTab, setSubjectTab]         = useState<SubjectTab>('tasks')
   const [attachments, setAttachments]       = useState<Attachment[]>([])
   const [subtasks, setSubtasks]             = useState<Subtask[]>([])
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
@@ -50,6 +56,8 @@ export default function App() {
     void loadTheme()
     void loadTags()
     void loadScheduleEntries()
+    void loadGradeStats()
+    void loadGradeScale()
   }, [])
 
   // Reload view-specific data when switching views
@@ -60,8 +68,13 @@ export default function App() {
 
   useEffect(() => {
     setSelectedTaskId(null)
-    if (selectedSubjectId !== null) void loadTasks(selectedSubjectId)
-    else setTasks([])
+    if (selectedSubjectId !== null) {
+      void loadTasks(selectedSubjectId)
+      void loadGrades(selectedSubjectId)
+    } else {
+      setTasks([])
+      setGrades([])
+    }
   }, [selectedSubjectId])
 
   useEffect(() => {
@@ -116,6 +129,23 @@ export default function App() {
   async function loadScheduleEntries() {
     try { setScheduleEntries(await unwrap(window.api.schedule.getAll())) }
     catch (e) { setError(String(e)) }
+  }
+
+  async function loadGrades(subjectId: number) {
+    try { setGrades(await unwrap(window.api.grades.getBySubject(subjectId))) }
+    catch (e) { setError(String(e)) }
+  }
+
+  async function loadGradeStats() {
+    try { setGradeStats(await unwrap(window.api.grades.getSubjectStats())) }
+    catch (e) { setError(String(e)) }
+  }
+
+  async function loadGradeScale() {
+    try {
+      const r = await window.api.settings.get('grades.scale')
+      if (r.success && r.data) setGradeScale(Number(r.data))
+    } catch { /* keep default */ }
   }
 
   async function loadAttachments(taskId: number) {
@@ -249,6 +279,30 @@ export default function App() {
     if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
   }
 
+  // ── Grade handlers ───────────────────────────────────────────────────────
+  async function handleCreateGrade(data: Omit<Grade, 'id' | 'created_at'>) {
+    const g = await unwrap(window.api.grades.create(data))
+    setGrades((prev) => [g, ...prev])
+    void loadGradeStats()
+  }
+
+  async function handleUpdateGrade(id: number, data: Partial<Omit<Grade, 'id' | 'created_at' | 'subject_id'>>) {
+    const g = await unwrap(window.api.grades.update(id, data))
+    setGrades((prev) => prev.map((x) => x.id === id ? g : x))
+    void loadGradeStats()
+  }
+
+  async function handleDeleteGrade(id: number) {
+    await unwrap(window.api.grades.delete(id))
+    setGrades((prev) => prev.filter((g) => g.id !== id))
+    void loadGradeStats()
+  }
+
+  async function handleGradeScaleChange(scale: number) {
+    setGradeScale(scale)
+    await unwrap(window.api.settings.set('grades.scale', String(scale)))
+  }
+
   // ── Schedule handlers ────────────────────────────────────────────────────
   async function handleCreateScheduleEntry(data: Omit<ScheduleEntry, 'id' | 'created_at'>) {
     const entry = await unwrap(window.api.schedule.create(data))
@@ -311,12 +365,26 @@ export default function App() {
         <SubjectList
           subjects={subjects}
           selectedSubjectId={selectedSubjectId}
+          gradeStats={gradeStats}
+          gradeScale={gradeScale}
           onSelect={(id) => { setSelectedSubjectId(id); if (view !== 'tasks') setView('tasks') }}
           onCreate={handleCreateSubject}
           onUpdate={handleUpdateSubject}
           onDelete={handleDeleteSubject}
         />
         <div className="sidebar-footer">
+          {gradeStats.length > 0 && (() => {
+            const totalW = gradeStats.reduce((s, x) => s + x.grade_count, 0)
+            const overall = totalW > 0
+              ? gradeStats.reduce((s, x) => s + x.weighted_avg * x.grade_count, 0) / totalW
+              : null
+            return overall !== null ? (
+              <div className="sidebar-gpa">
+                <span className="sidebar-gpa-label">Общий балл</span>
+                <span className="sidebar-gpa-value">{(overall * gradeScale).toFixed(gradeScale <= 10 ? 2 : 1)} / {gradeScale}</span>
+              </div>
+            ) : null
+          })()}
           <button className="settings-btn" onClick={() => setShowSettings(true)}>⚙ Настройки</button>
         </div>
       </div>
@@ -325,6 +393,42 @@ export default function App() {
       {view === 'tasks' && (
         <>
           <div className="main-panel">
+            {/* Subject tab bar */}
+            {selectedSubject && (
+              <div className="subject-tab-bar">
+                <button
+                  className={`subject-tab${subjectTab === 'tasks' ? ' active' : ''}`}
+                  style={subjectTab === 'tasks' ? { borderColor: selectedSubject.color, color: selectedSubject.color } : {}}
+                  onClick={() => setSubjectTab('tasks')}
+                >
+                  📋 Задания
+                </button>
+                <button
+                  className={`subject-tab${subjectTab === 'grades' ? ' active' : ''}`}
+                  style={subjectTab === 'grades' ? { borderColor: selectedSubject.color, color: selectedSubject.color } : {}}
+                  onClick={() => setSubjectTab('grades')}
+                >
+                  ★ Оценки
+                  {(() => {
+                    const stat = gradeStats.find((s) => s.subject_id === selectedSubject.id)
+                    if (!stat) return null
+                    const score = (stat.weighted_avg * gradeScale).toFixed(gradeScale <= 10 ? 2 : 1)
+                    return <span className="subject-tab-badge">{score}</span>
+                  })()}
+                </button>
+              </div>
+            )}
+
+            {subjectTab === 'grades' && selectedSubject ? (
+              <GradeList
+                subject={selectedSubject}
+                grades={grades}
+                scale={gradeScale}
+                onCreate={handleCreateGrade}
+                onUpdate={handleUpdateGrade}
+                onDelete={handleDeleteGrade}
+              />
+            ) : (
             <TaskList
               subject={selectedSubject}
               tasks={tasks}
@@ -336,6 +440,7 @@ export default function App() {
               onUpdateTask={handleUpdateTask}
               onCompleteRecurring={handleCompleteRecurring}
             />
+            )}
           </div>
 
           {selectedTask && (
@@ -405,7 +510,9 @@ export default function App() {
         <SettingsPanel
           theme={theme}
           tags={tags}
+          gradeScale={gradeScale}
           onThemeChange={handleThemeChange}
+          onGradeScaleChange={handleGradeScaleChange}
           onCreateTag={handleCreateTag}
           onUpdateTag={handleUpdateTag}
           onDeleteTag={handleDeleteTag}

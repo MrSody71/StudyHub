@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Subject } from '../types'
+import type { Subject, SubjectGradeStat } from '../types'
 
 const COLORS = [
   '#ef4444','#f97316','#eab308','#22c55e',
@@ -10,6 +10,8 @@ const COLORS = [
 interface Props {
   subjects:          Subject[]
   selectedSubjectId: number | null
+  gradeStats?:       SubjectGradeStat[]
+  gradeScale?:       number
   onSelect:          (id: number) => void
   onCreate:          (data: { name: string; color: string; description?: string | null }) => void
   onUpdate:          (id: number, data: Partial<Omit<Subject, 'id' | 'created_at'>>) => void
@@ -21,7 +23,7 @@ interface ModalState {
   editing: Subject | null
 }
 
-export default function SubjectList({ subjects, selectedSubjectId, onSelect, onCreate, onUpdate, onDelete }: Props) {
+export default function SubjectList({ subjects, selectedSubjectId, gradeStats, gradeScale = 100, onSelect, onCreate, onUpdate, onDelete }: Props) {
   const [modal, setModal]       = useState<ModalState>({ open: false, editing: null })
   const [name, setName]         = useState('')
   const [color, setColor]       = useState(COLORS[5])
@@ -76,7 +78,9 @@ export default function SubjectList({ subjects, selectedSubjectId, onSelect, onC
       </div>
 
       <div className="subjects-list">
-        {filtered.map((s) => (
+        {filtered.map((s) => {
+          const stat = gradeStats?.find((g) => g.subject_id === s.id)
+          return (
           <div
             key={s.id}
             className={`subject-item${selectedSubjectId === s.id ? ' selected' : ''}`}
@@ -84,12 +88,18 @@ export default function SubjectList({ subjects, selectedSubjectId, onSelect, onC
           >
             <span className="subject-dot" style={{ background: s.color }} />
             <span className="subject-name">{s.name}</span>
+            {stat && (
+              <span className="subject-grade-badge" style={{ color: s.color }}>
+                {(stat.weighted_avg * gradeScale).toFixed(gradeScale <= 10 ? 1 : 0)}
+              </span>
+            )}
             <span className="subject-actions" onClick={(e) => e.stopPropagation()}>
               <button className="icon-btn" title="Редактировать" onClick={(e) => openEdit(e, s)}>✏</button>
               <button className="icon-btn danger" title="Удалить" onClick={(e) => { e.stopPropagation(); onDelete(s.id) }}>🗑</button>
             </span>
           </div>
-        ))}
+          )
+        })}
 
         {filtered.length === 0 && (
           <div style={{ padding: '12px 10px', color: 'rgba(255,255,255,.25)', fontSize: 12 }}>
