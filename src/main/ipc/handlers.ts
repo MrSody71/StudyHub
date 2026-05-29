@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { ipcMain, dialog, BrowserWindow, Notification } from 'electron'
 import { getAllSubjects, createSubject, updateSubject, deleteSubject } from '../db/subjects'
 import { getTasksBySubject, getAllTasksWithDeadline, createTask, updateTask, deleteTask, completeTaskAndSpawnNext } from '../db/tasks'
 import {
@@ -14,6 +14,7 @@ import { getSetting, setSetting } from '../db/settings'
 import {
   getAllScheduleEntries, createScheduleEntry, updateScheduleEntry, deleteScheduleEntry
 } from '../db/schedule'
+import { createSession, getSessionStats } from '../db/sessions'
 
 function wrap<T>(fn: () => T): { success: true; data: T } | { success: false; error: string } {
   try {
@@ -65,6 +66,22 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('schedule:create',    (_e, data)                 => wrap(() => createScheduleEntry(data)))
   ipcMain.handle('schedule:update',    (_e, id: number, data)     => wrap(() => updateScheduleEntry(id, data)))
   ipcMain.handle('schedule:delete',    (_e, id: number)           => wrap(() => { deleteScheduleEntry(id); return null }))
+
+  // ── Study sessions ────────────────────────────────────────────────────────
+  ipcMain.handle('sessions:create', (_e, data) => wrap(() => createSession(data)))
+  ipcMain.handle('sessions:getStats', ()       => wrap(() => getSessionStats()))
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+  ipcMain.handle('notifications:show', (_e, title: string, body: string) => {
+    try {
+      if (Notification.isSupported()) {
+        new Notification({ title, body }).show()
+      }
+      return { success: true, data: null }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
 
   // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', (_e, key: string) => wrap(() => getSetting(key)))

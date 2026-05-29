@@ -65,3 +65,38 @@ export interface ScheduleEntry {
   location:    string | null
   created_at:  string
 }
+
+export type SessionType = 'pomodoro' | 'short_break' | 'long_break' | 'manual'
+
+export interface StudySession {
+  id:               number
+  subject_id:       number | null
+  task_id:          number | null
+  type:             SessionType
+  duration_seconds: number
+  started_at:       string
+  ended_at:         string | null
+  created_at:       string
+}
+
+export interface SubjectStat {
+  subject_id:    number
+  subject_name:  string
+  subject_color: string
+  total_seconds: number
+  session_count: number
+}
+
+export interface DayStat {
+  date:          string
+  total_seconds: number
+  session_count: number
+}
+
+export interface SessionStats {
+  bySubject:     SubjectStat[]
+  byDay:         DayStat[]
+  todaySeconds:  number
+  totalSeconds:  number
+  totalSessions: number
+}

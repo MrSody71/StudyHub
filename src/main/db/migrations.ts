@@ -114,6 +114,31 @@ const migrations: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_schedule_day ON schedule_entries(day_of_week);
       `)
     }
+  },
+  {
+    version: 6,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS study_sessions (
+          id               INTEGER PRIMARY KEY AUTOINCREMENT,
+          subject_id       INTEGER REFERENCES subjects(id) ON DELETE SET NULL,
+          task_id          INTEGER REFERENCES tasks(id)    ON DELETE SET NULL,
+          type             TEXT    NOT NULL DEFAULT 'pomodoro'
+                           CHECK (type IN ('pomodoro','short_break','long_break','manual')),
+          duration_seconds INTEGER NOT NULL DEFAULT 0,
+          started_at       TEXT    NOT NULL,
+          ended_at         TEXT,
+          created_at       TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_sessions_subject   ON study_sessions(subject_id);
+        CREATE INDEX IF NOT EXISTS idx_sessions_started   ON study_sessions(started_at);
+
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('pomodoro.work',       '25');
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('pomodoro.shortBreak', '5');
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('pomodoro.longBreak',  '15');
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('pomodoro.interval',   '4');
+      `)
+    }
   }
 ]
 

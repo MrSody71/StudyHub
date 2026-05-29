@@ -1,6 +1,84 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Task, Tag, Attachment, Subtask, TaskStatus, TaskPriority } from '../types'
 
+// ── Manual timer ──────────────────────────────────────────────────────────────
+
+function useStopwatch() {
+  const [running, setRunning]   = useState(false)
+  const [elapsed, setElapsed]   = useState(0)
+  const startRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!running) return
+    const id = setInterval(() => {
+      if (startRef.current !== null) {
+        setElapsed(Math.floor((Date.now() - startRef.current) / 1000))
+      }
+    }, 500)
+    return () => clearInterval(id)
+  }, [running])
+
+  function start() {
+    startRef.current = Date.now() - elapsed * 1000
+    setRunning(true)
+  }
+  function stop() { setRunning(false) }
+  function reset() { setRunning(false); setElapsed(0); startRef.current = null }
+
+  return { running, elapsed, start, stop, reset, startedAt: startRef }
+}
+
+function ManualTimer({ taskId, subjectId, onSessionSaved }: { taskId: number; subjectId: number; onSessionSaved?: () => void }) {
+  const sw = useStopwatch()
+  const startedIsoRef = useRef<string | null>(null)
+
+  function pad(n: number) { return String(n).padStart(2, '0') }
+  const h = Math.floor(sw.elapsed / 3600)
+  const m = Math.floor((sw.elapsed % 3600) / 60)
+  const s = sw.elapsed % 60
+
+  async function handleStop() {
+    sw.stop()
+    if (sw.elapsed < 5) { sw.reset(); return }
+    try {
+      await window.api.sessions.create({
+        subject_id:       subjectId,
+        task_id:          taskId,
+        type:             'manual',
+        duration_seconds: sw.elapsed,
+        started_at:       startedIsoRef.current ?? new Date().toISOString(),
+        ended_at:         new Date().toISOString(),
+      })
+      onSessionSaved?.()
+    } catch { /* non-fatal */ }
+    sw.reset()
+    startedIsoRef.current = null
+  }
+
+  function handleStart() {
+    startedIsoRef.current = new Date().toISOString()
+    sw.start()
+  }
+
+  return (
+    <div className="manual-timer">
+      <div className="manual-timer-display">
+        {pad(h)}:{pad(m)}:{pad(s)}
+      </div>
+      <div className="manual-timer-controls">
+        {sw.running ? (
+          <button className="btn btn-danger btn-sm" onClick={() => void handleStop()}>Стоп и сохранить</button>
+        ) : (
+          <button className="btn btn-primary btn-sm" onClick={handleStart}>Старт</button>
+        )}
+        {!sw.running && sw.elapsed > 0 && (
+          <button className="btn btn-ghost btn-sm" onClick={sw.reset}>↺ Сброс</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const TAG_COLORS = [
   '#ef4444','#f97316','#eab308','#22c55e',
   '#14b8a6','#3b82f6','#8b5cf6','#ec4899',
@@ -22,6 +100,7 @@ interface Props {
   onUpdateSubtask:     (id: number, data: { title?: string; is_done?: boolean }) => void
   onDeleteSubtask:     (id: number) => void
   onReorderSubtasks:   (taskId: number, orderedIds: number[]) => void
+  onSessionSaved?:     () => void
   onClose:             () => void
 }
 
@@ -211,6 +290,7 @@ export default function TaskDetail({
   onUpdate, onCompleteRecurring, onSetTaskTags, onCreateTag,
   onAddAttachment, onDeleteAttachment, onOpenAttachment,
   onCreateSubtask, onUpdateSubtask, onDeleteSubtask, onReorderSubtasks,
+  onSessionSaved,
   onClose,
 }: Props) {
   // ── Title / description editing ───────────────────────────────────────────
@@ -565,6 +645,12 @@ export default function TaskDetail({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Manual timer */}
+        <div>
+          <div className="detail-section-label" style={{ marginBottom: 8 }}>Таймер</div>
+          <ManualTimer taskId={task.id} subjectId={task.subject_id} onSessionSaved={onSessionSaved} />
         </div>
 
         {/* Description */}

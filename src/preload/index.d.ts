@@ -1,4 +1,4 @@
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry } from '../renderer/src/types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, StudySession, SessionStats } from '../renderer/src/types'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
 
@@ -44,6 +44,13 @@ declare global {
         create:  (data: Omit<ScheduleEntry, 'id' | 'created_at'>)                   => Promise<IpcResult<ScheduleEntry>>
         update:  (id: number, data: Partial<Omit<ScheduleEntry, 'id' | 'created_at'>>) => Promise<IpcResult<ScheduleEntry>>
         delete:  (id: number)                                                         => Promise<IpcResult<null>>
+      }
+      sessions: {
+        create:   (data: Omit<StudySession, 'id' | 'created_at'>) => Promise<IpcResult<StudySession>>
+        getStats: ()                                               => Promise<IpcResult<SessionStats>>
+      }
+      notifications: {
+        show: (title: string, body: string) => Promise<IpcResult<null>>
       }
       settings: {
         get: (key: string)                => Promise<IpcResult<string | null>>

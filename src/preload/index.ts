@@ -41,6 +41,13 @@ const api = {
     update:  (id: number, data: unknown)   => ipcRenderer.invoke('schedule:update', id, data),
     delete:  (id: number)                  => ipcRenderer.invoke('schedule:delete', id)
   },
+  sessions: {
+    create:   (data: unknown) => ipcRenderer.invoke('sessions:create', data),
+    getStats: ()              => ipcRenderer.invoke('sessions:getStats')
+  },
+  notifications: {
+    show: (title: string, body: string) => ipcRenderer.invoke('notifications:show', title, body)
+  },
   settings: {
     get: (key: string)                => ipcRenderer.invoke('settings:get', key),
     set: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value)

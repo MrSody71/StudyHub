@@ -5,10 +5,13 @@ import TaskList from './components/TaskList'
 import TaskDetail from './components/TaskDetail'
 import WeeklySchedule from './components/WeeklySchedule'
 import MonthCalendar from './components/MonthCalendar'
+import PomodoroTimer from './components/PomodoroTimer'
+import StudyStats from './components/StudyStats'
 import SettingsPanel from './components/SettingsPanel'
+import { usePomodoro } from './hooks/usePomodoro'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
-type AppView = 'tasks' | 'schedule' | 'calendar'
+type AppView = 'tasks' | 'schedule' | 'calendar' | 'timer'
 
 async function unwrap<T>(p: Promise<IpcResult<T>>): Promise<T> {
   const r = await p
@@ -30,6 +33,11 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId]       = useState<number | null>(null)
   const [showSettings, setShowSettings]     = useState(false)
   const [error, setError]                   = useState<string | null>(null)
+
+  const [sessionVersion, setSessionVersion] = useState(0)
+
+  // Pomodoro – instantiated at App level so it persists across view switches
+  const [pomState, pomControls] = usePomodoro(() => setSessionVersion((v) => v + 1))
 
   // Used to auto-select a task after navigating from the calendar
   const autoSelectTaskRef = useRef<number | null>(null)
@@ -292,6 +300,12 @@ export default function App() {
           <button className={`view-nav-btn${view === 'calendar' ? ' active' : ''}`} onClick={() => setView('calendar')}>
             <span className="view-nav-icon">📅</span> Календарь
           </button>
+          <button className={`view-nav-btn${view === 'timer' ? ' active' : ''}`} onClick={() => setView('timer')}>
+            <span className="view-nav-icon">⏱</span> Таймер
+            {pomState.status === 'running' && (
+              <span className="pom-running-badge" />
+            )}
+          </button>
         </div>
 
         <SubjectList
@@ -342,6 +356,7 @@ export default function App() {
                 onUpdateSubtask={handleUpdateSubtask}
                 onDeleteSubtask={handleDeleteSubtask}
                 onReorderSubtasks={handleReorderSubtasks}
+                onSessionSaved={() => setSessionVersion((v) => v + 1)}
                 onClose={() => setSelectedTaskId(null)}
               />
             </div>
@@ -370,6 +385,19 @@ export default function App() {
             subjects={subjects}
             onNavigateToTask={handleNavigateToTask}
           />
+        </div>
+      )}
+
+      {/* ── Timer view ────────────────────────────────────────────────────── */}
+      {view === 'timer' && (
+        <div className="full-content-panel timer-layout">
+          <PomodoroTimer
+            state={pomState}
+            controls={pomControls}
+            subjects={subjects}
+            tasks={tasks.length > 0 ? tasks : allDeadlineTasks}
+          />
+          <StudyStats sessionVersion={sessionVersion} />
         </div>
       )}
 
