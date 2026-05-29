@@ -66,6 +66,15 @@ export interface ScheduleEntry {
   created_at:  string
 }
 
+export interface Note {
+  id:         number
+  subject_id: number
+  title:      string
+  content:    string
+  updated_at: string
+  created_at: string
+}
+
 export interface Grade {
   id:         number
   subject_id: number

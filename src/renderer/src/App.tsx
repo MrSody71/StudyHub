@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, Grade, SubjectGradeStat, Theme } from './types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, Grade, SubjectGradeStat, Note, Theme } from './types'
 import SubjectList from './components/SubjectList'
 import TaskList from './components/TaskList'
 import TaskDetail from './components/TaskDetail'
 import GradeList from './components/GradeList'
+import NoteList from './components/NoteList'
 import WeeklySchedule from './components/WeeklySchedule'
 import MonthCalendar from './components/MonthCalendar'
 import PomodoroTimer from './components/PomodoroTimer'
@@ -13,7 +14,7 @@ import { usePomodoro } from './hooks/usePomodoro'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
 type AppView    = 'tasks' | 'schedule' | 'calendar' | 'timer'
-type SubjectTab = 'tasks' | 'grades'
+type SubjectTab = 'tasks' | 'grades' | 'notes'
 
 async function unwrap<T>(p: Promise<IpcResult<T>>): Promise<T> {
   const r = await p
@@ -32,6 +33,7 @@ export default function App() {
   const [grades, setGrades]                 = useState<Grade[]>([])
   const [gradeStats, setGradeStats]         = useState<SubjectGradeStat[]>([])
   const [gradeScale, setGradeScale]         = useState(100)
+  const [notes, setNotes]                   = useState<Note[]>([])
   const [subjectTab, setSubjectTab]         = useState<SubjectTab>('tasks')
   const [attachments, setAttachments]       = useState<Attachment[]>([])
   const [subtasks, setSubtasks]             = useState<Subtask[]>([])
@@ -71,9 +73,11 @@ export default function App() {
     if (selectedSubjectId !== null) {
       void loadTasks(selectedSubjectId)
       void loadGrades(selectedSubjectId)
+      void loadNotes(selectedSubjectId)
     } else {
       setTasks([])
       setGrades([])
+      setNotes([])
     }
   }, [selectedSubjectId])
 
@@ -138,6 +142,11 @@ export default function App() {
 
   async function loadGradeStats() {
     try { setGradeStats(await unwrap(window.api.grades.getSubjectStats())) }
+    catch (e) { setError(String(e)) }
+  }
+
+  async function loadNotes(subjectId: number) {
+    try { setNotes(await unwrap(window.api.notes.getBySubject(subjectId))) }
     catch (e) { setError(String(e)) }
   }
 
@@ -279,6 +288,24 @@ export default function App() {
     if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
   }
 
+  // ── Note handlers ────────────────────────────────────────────────────────
+  async function handleCreateNote(subjectId: number, title: string): Promise<Note> {
+    const note = await unwrap(window.api.notes.create(subjectId, title))
+    setNotes((prev) => [note, ...prev])
+    return note
+  }
+
+  function handleUpdateNote(id: number, data: { title?: string; content?: string }) {
+    window.api.notes.update(id, data).then((r) => {
+      if (r.success) setNotes((prev) => prev.map((n) => n.id === id ? r.data : n))
+    }).catch(() => {/* non-fatal */})
+  }
+
+  async function handleDeleteNote(id: number) {
+    await unwrap(window.api.notes.delete(id))
+    setNotes((prev) => prev.filter((n) => n.id !== id))
+  }
+
   // ── Grade handlers ───────────────────────────────────────────────────────
   async function handleCreateGrade(data: Omit<Grade, 'id' | 'created_at'>) {
     const g = await unwrap(window.api.grades.create(data))
@@ -416,10 +443,26 @@ export default function App() {
                     return <span className="subject-tab-badge">{score}</span>
                   })()}
                 </button>
+                <button
+                  className={`subject-tab${subjectTab === 'notes' ? ' active' : ''}`}
+                  style={subjectTab === 'notes' ? { borderColor: selectedSubject.color, color: selectedSubject.color } : {}}
+                  onClick={() => setSubjectTab('notes')}
+                >
+                  📝 Заметки
+                  {notes.length > 0 && <span className="subject-tab-badge">{notes.length}</span>}
+                </button>
               </div>
             )}
 
-            {subjectTab === 'grades' && selectedSubject ? (
+            {subjectTab === 'notes' && selectedSubject ? (
+              <NoteList
+                subject={selectedSubject}
+                notes={notes}
+                onCreate={handleCreateNote}
+                onUpdate={handleUpdateNote}
+                onDelete={handleDeleteNote}
+              />
+            ) : subjectTab === 'grades' && selectedSubject ? (
               <GradeList
                 subject={selectedSubject}
                 grades={grades}

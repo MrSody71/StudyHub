@@ -159,6 +159,23 @@ const migrations: Migration[] = [
         INSERT OR IGNORE INTO settings (key, value) VALUES ('grades.scale', '100');
       `)
     }
+  },
+  {
+    version: 8,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS notes (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+          title      TEXT    NOT NULL DEFAULT 'Без названия',
+          content    TEXT    NOT NULL DEFAULT '',
+          updated_at TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+          created_at TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_notes_subject ON notes(subject_id);
+        CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at);
+      `)
+    }
   }
 ]
 
