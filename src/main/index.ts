@@ -1,8 +1,15 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell, protocol } from 'electron'
 import path from 'path'
 import { initDatabase, closeDatabase } from './db/database'
 import { setupIpcHandlers } from './ipc/handlers'
 import { startNotificationScheduler } from './notifications'
+import { setupAttachmentProtocol } from './protocol'
+
+// Must be called before app.ready
+protocol.registerSchemesAsPrivileged([{
+  scheme:     'attachment',
+  privileges: { secure: true, standard: true, bypassCSP: true, supportFetchAPI: true },
+}])
 
 app.setName('StudyHub')
 // Required on Windows for system notifications to appear correctly
@@ -52,6 +59,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   initDatabase()
   setupIpcHandlers()
+  setupAttachmentProtocol()
   startNotificationScheduler()
   createWindow()
 

@@ -1,6 +1,68 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Task, Tag, Attachment, Subtask, TaskStatus, TaskPriority } from '../types'
 
+// ── Attachment preview helpers ────────────────────────────────────────────────
+
+function attachmentUrl(id: number): string {
+  return `attachment://${id}`
+}
+
+function isImage(mime: string): boolean {
+  return ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml'].includes(mime)
+}
+
+function isPdf(mime: string): boolean {
+  return mime === 'application/pdf'
+}
+
+/** Lightbox overlay for images */
+function ImageLightbox({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="lightbox-overlay" onClick={onClose}>
+      <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
+        <div className="lightbox-header">
+          <span className="lightbox-name">{name}</span>
+          <button className="lightbox-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="lightbox-img-wrap">
+          <img src={url} alt={name} className="lightbox-img" draggable={false} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** PDF viewer overlay */
+function PdfViewer({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="lightbox-overlay" onClick={onClose}>
+      <div className="lightbox-content lightbox-pdf" onClick={(e) => e.stopPropagation()}>
+        <div className="lightbox-header">
+          <span className="lightbox-name">📄 {name}</span>
+          <button className="lightbox-close" onClick={onClose}>✕</button>
+        </div>
+        <iframe
+          className="pdf-frame"
+          src={url}
+          title={name}
+        />
+      </div>
+    </div>
+  )
+}
+
 // ── Manual timer ──────────────────────────────────────────────────────────────
 
 function useStopwatch() {
@@ -279,6 +341,129 @@ function ProgressBar({ total, done }: { total: number; done: number }) {
       <div className="subtask-progress-track">
         <div className={`subtask-progress-fill${allDone ? ' all-done' : ''}`} style={{ width: `${pct}%` }} />
       </div>
+    </div>
+  )
+}
+
+// ── Attachment section ────────────────────────────────────────────────────────
+
+interface AttachmentSectionProps {
+  attachments: Attachment[]
+  onAdd:    () => void
+  onDelete: (id: number) => void
+  onOpen:   (id: number) => void
+}
+
+function AttachmentSection({ attachments, onAdd, onDelete, onOpen }: AttachmentSectionProps) {
+  const [lightbox, setLightbox] = useState<Attachment | null>(null)
+  const [pdfView,  setPdfView]  = useState<Attachment | null>(null)
+
+  // Image thumbnails row (up to 4 visible)
+  const images  = attachments.filter((a) => isImage(a.mime_type))
+  const others  = attachments.filter((a) => !isImage(a.mime_type))
+
+  return (
+    <div>
+      {lightbox && (
+        <ImageLightbox
+          url={attachmentUrl(lightbox.id)}
+          name={lightbox.filename}
+          onClose={() => setLightbox(null)}
+        />
+      )}
+      {pdfView && (
+        <PdfViewer
+          url={attachmentUrl(pdfView.id)}
+          name={pdfView.filename}
+          onClose={() => setPdfView(null)}
+        />
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div className="detail-section-label" style={{ marginBottom: 0 }}>
+          Вложения ({attachments.length})
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={onAdd}>+ Прикрепить файл</button>
+      </div>
+
+      {attachments.length === 0 ? (
+        <div style={{ color: 'var(--text-tertiary)', fontSize: 13, padding: '10px 0', textAlign: 'center' }}>
+          Нет прикреплённых файлов
+        </div>
+      ) : (
+        <>
+          {/* Image thumbnail strip */}
+          {images.length > 0 && (
+            <div className="attachment-thumbs">
+              {images.map((a) => (
+                <div
+                  key={a.id}
+                  className="attachment-thumb"
+                  title={a.filename}
+                  onClick={() => setLightbox(a)}
+                >
+                  <img src={attachmentUrl(a.id)} alt={a.filename} className="attachment-thumb-img" />
+                  <button
+                    className="attachment-thumb-del"
+                    onClick={(e) => { e.stopPropagation(); onDelete(a.id) }}
+                    title="Удалить"
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Non-image list */}
+          {others.length > 0 && (
+            <div className="attachment-list">
+              {others.map((a) => {
+                const canPreview = isPdf(a.mime_type)
+                return (
+                  <div
+                    key={a.id}
+                    className="attachment-item"
+                    onDoubleClick={() => canPreview ? setPdfView(a) : onOpen(a.id)}
+                    title={canPreview ? 'Двойной клик — предпросмотр' : 'Двойной клик — открыть файл'}
+                  >
+                    <span className="attachment-icon">{fileIcon(a.mime_type)}</span>
+                    <div className="attachment-info">
+                      <div className="attachment-name">{a.filename}</div>
+                      <div className="attachment-size">
+                        {formatSize(a.size)} · {new Date(a.created_at).toLocaleDateString('ru-RU')}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      {canPreview && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setPdfView(a)}
+                          title="Предпросмотр PDF"
+                          style={{ fontSize: 12 }}
+                        >
+                          👁
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => onOpen(a.id)}
+                        title="Открыть в системной программе"
+                        style={{ fontSize: 12 }}
+                      >
+                        ↗
+                      </button>
+                      <button
+                        className="attachment-del"
+                        onClick={() => onDelete(a.id)}
+                        title="Удалить вложение"
+                      >🗑</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -716,48 +901,12 @@ export default function TaskDetail({
         </div>
 
         {/* Attachments */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div className="detail-section-label" style={{ marginBottom: 0 }}>
-              Вложения ({attachments.length})
-            </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => onAddAttachment(task.id)}>
-              + Прикрепить файл
-            </button>
-          </div>
-
-          {attachments.length === 0 ? (
-            <div style={{ color: 'var(--text-tertiary)', fontSize: 13, padding: '10px 0', textAlign: 'center' }}>
-              Нет прикреплённых файлов
-            </div>
-          ) : (
-            <div className="attachment-list">
-              {attachments.map((a) => (
-                <div
-                  key={a.id}
-                  className="attachment-item"
-                  onDoubleClick={() => onOpenAttachment(a.id)}
-                  title="Двойной клик — открыть файл"
-                >
-                  <span className="attachment-icon">{fileIcon(a.mime_type)}</span>
-                  <div className="attachment-info">
-                    <div className="attachment-name">{a.filename}</div>
-                    <div className="attachment-size">
-                      {formatSize(a.size)} · {new Date(a.created_at).toLocaleDateString('ru-RU')}
-                    </div>
-                  </div>
-                  <button
-                    className="attachment-del"
-                    onClick={() => onDeleteAttachment(a.id)}
-                    title="Удалить вложение"
-                  >
-                    🗑
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <AttachmentSection
+          attachments={attachments}
+          onAdd={() => onAddAttachment(task.id)}
+          onDelete={onDeleteAttachment}
+          onOpen={onOpenAttachment}
+        />
 
         {/* Footer */}
         <div style={{ color: 'var(--text-tertiary)', fontSize: 11, paddingTop: 4, borderTop: '1px solid var(--border)' }}>

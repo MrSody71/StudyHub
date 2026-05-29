@@ -96,6 +96,10 @@ export function deleteAttachment(id: number): void {
   db.prepare('DELETE FROM attachments WHERE id = ?').run(id)
 }
 
+export function getAttachmentById(id: number): AttachmentRow | null {
+  return (getDb().prepare('SELECT * FROM attachments WHERE id = ?').get(id) as AttachmentRow) ?? null
+}
+
 export function openAttachment(id: number): void {
   const row = getDb()
     .prepare('SELECT * FROM attachments WHERE id = ?')
