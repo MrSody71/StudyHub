@@ -1,0 +1,30 @@
+appId: com.studyhub.app
+productName: StudyHub
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - node_modules/**/*
+  - "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
+  - "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
+  - "!node_modules/.bin"
+asarUnpack:
+  - "node_modules/better-sqlite3/**/*"
+  - "node_modules/bindings/**/*"
+  - "node_modules/file-uri-to-path/**/*"
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+mac:
+  target:
+    - dmg
+linux:
+  target:
+    - AppImage

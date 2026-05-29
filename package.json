@@ -1,0 +1,30 @@
+{
+  "name": "studyhub",
+  "version": "1.0.0",
+  "description": "Desktop study organizer",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite dev",
+    "build": "electron-vite build",
+    "dist": "npm run build && electron-builder",
+    "setup": "npm install --ignore-scripts && node node_modules/electron/install.js && npx electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "@vitejs/plugin-react": "^4.2.1",
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.1",
+    "electron-vite": "^2.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.1.1"
+  }
+}
