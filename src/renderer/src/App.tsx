@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react'
-import type { Subject, Task, Attachment, Subtask, Tag, Theme } from './types'
+import { useState, useEffect, useRef } from 'react'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, Theme } from './types'
 import SubjectList from './components/SubjectList'
 import TaskList from './components/TaskList'
 import TaskDetail from './components/TaskDetail'
+import WeeklySchedule from './components/WeeklySchedule'
+import MonthCalendar from './components/MonthCalendar'
 import SettingsPanel from './components/SettingsPanel'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
+type AppView = 'tasks' | 'schedule' | 'calendar'
 
 async function unwrap<T>(p: Promise<IpcResult<T>>): Promise<T> {
   const r = await p
@@ -15,8 +18,11 @@ async function unwrap<T>(p: Promise<IpcResult<T>>): Promise<T> {
 
 export default function App() {
   const [theme, setTheme]                   = useState<Theme>('light')
+  const [view, setView]                     = useState<AppView>('tasks')
   const [subjects, setSubjects]             = useState<Subject[]>([])
   const [tasks, setTasks]                   = useState<Task[]>([])
+  const [allDeadlineTasks, setAllDeadlineTasks] = useState<Task[]>([])
+  const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([])
   const [tags, setTags]                     = useState<Tag[]>([])
   const [attachments, setAttachments]       = useState<Attachment[]>([])
   const [subtasks, setSubtasks]             = useState<Subtask[]>([])
@@ -25,10 +31,24 @@ export default function App() {
   const [showSettings, setShowSettings]     = useState(false)
   const [error, setError]                   = useState<string | null>(null)
 
+  // Used to auto-select a task after navigating from the calendar
+  const autoSelectTaskRef = useRef<number | null>(null)
+
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null
   const selectedTask    = tasks.find((t) => t.id === selectedTaskId) ?? null
 
-  useEffect(() => { void loadSubjects(); void loadTheme(); void loadTags() }, [])
+  useEffect(() => {
+    void loadSubjects()
+    void loadTheme()
+    void loadTags()
+    void loadScheduleEntries()
+  }, [])
+
+  // Reload view-specific data when switching views
+  useEffect(() => {
+    if (view === 'calendar') void loadAllDeadlineTasks()
+    if (view === 'schedule') void loadScheduleEntries()
+  }, [view])
 
   useEffect(() => {
     setSelectedTaskId(null)
@@ -63,12 +83,30 @@ export default function App() {
   }
 
   async function loadTasks(subjectId: number) {
-    try { setTasks(await unwrap(window.api.tasks.getBySubject(subjectId))) }
+    try {
+      const loaded = await unwrap(window.api.tasks.getBySubject(subjectId))
+      setTasks(loaded)
+      // Auto-select task if navigating from calendar
+      if (autoSelectTaskRef.current !== null) {
+        const id = autoSelectTaskRef.current
+        autoSelectTaskRef.current = null
+        if (loaded.some((t) => t.id === id)) setSelectedTaskId(id)
+      }
+    } catch (e) { setError(String(e)) }
+  }
+
+  async function loadAllDeadlineTasks() {
+    try { setAllDeadlineTasks(await unwrap(window.api.tasks.getAllWithDeadline())) }
     catch (e) { setError(String(e)) }
   }
 
   async function loadTags() {
     try { setTags(await unwrap(window.api.tags.getAll())) }
+    catch (e) { setError(String(e)) }
+  }
+
+  async function loadScheduleEntries() {
+    try { setScheduleEntries(await unwrap(window.api.schedule.getAll())) }
     catch (e) { setError(String(e)) }
   }
 
@@ -80,11 +118,6 @@ export default function App() {
   async function loadSubtasks(taskId: number) {
     try { setSubtasks(await unwrap(window.api.subtasks.getByTask(taskId))) }
     catch (e) { setError(String(e)) }
-  }
-
-  async function refreshSubtasks(taskId: number) {
-    await loadSubtasks(taskId)
-    if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
   }
 
   // ── Subject handlers ─────────────────────────────────────────────────────
@@ -131,6 +164,13 @@ export default function App() {
       const updated = prev.map((t) => t.id === id ? { ...t, ...result.task } : t)
       return result.spawned ? [result.spawned, ...updated] : updated
     })
+  }
+
+  // Navigate from calendar to a specific task
+  function handleNavigateToTask(subjectId: number, taskId: number) {
+    autoSelectTaskRef.current = taskId
+    setView('tasks')
+    setSelectedSubjectId(subjectId)
   }
 
   // ── Attachment handlers ──────────────────────────────────────────────────
@@ -187,7 +227,6 @@ export default function App() {
   async function handleUpdateTag(id: number, data: { name?: string; color?: string }) {
     const tag = await unwrap(window.api.tags.update(id, data))
     setTags((prev) => prev.map((t) => t.id === id ? tag : t))
-    // Refresh tasks so tag pills update in the list
     if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
   }
 
@@ -200,6 +239,26 @@ export default function App() {
   async function handleSetTaskTags(taskId: number, tagIds: number[]) {
     await unwrap(window.api.tags.setTaskTags(taskId, tagIds))
     if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
+  }
+
+  // ── Schedule handlers ────────────────────────────────────────────────────
+  async function handleCreateScheduleEntry(data: Omit<ScheduleEntry, 'id' | 'created_at'>) {
+    const entry = await unwrap(window.api.schedule.create(data))
+    setScheduleEntries((prev) => [...prev, entry].sort((a, b) =>
+      a.day_of_week !== b.day_of_week ? a.day_of_week - b.day_of_week : a.start_time.localeCompare(b.start_time)
+    ))
+  }
+
+  async function handleUpdateScheduleEntry(id: number, data: Partial<Omit<ScheduleEntry, 'id' | 'created_at'>>) {
+    const entry = await unwrap(window.api.schedule.update(id, data))
+    setScheduleEntries((prev) => prev.map((e) => e.id === id ? entry : e).sort((a, b) =>
+      a.day_of_week !== b.day_of_week ? a.day_of_week - b.day_of_week : a.start_time.localeCompare(b.start_time)
+    ))
+  }
+
+  async function handleDeleteScheduleEntry(id: number) {
+    await unwrap(window.api.schedule.delete(id))
+    setScheduleEntries((prev) => prev.filter((e) => e.id !== id))
   }
 
   async function handleThemeChange(t: Theme) {
@@ -221,10 +280,24 @@ export default function App() {
           <span className="app-logo">📚</span>
           <span className="app-title">StudyHub</span>
         </div>
+
+        {/* View navigator */}
+        <div className="view-nav">
+          <button className={`view-nav-btn${view === 'tasks'    ? ' active' : ''}`} onClick={() => setView('tasks')}>
+            <span className="view-nav-icon">📋</span> Задания
+          </button>
+          <button className={`view-nav-btn${view === 'schedule' ? ' active' : ''}`} onClick={() => setView('schedule')}>
+            <span className="view-nav-icon">🗓</span> Расписание
+          </button>
+          <button className={`view-nav-btn${view === 'calendar' ? ' active' : ''}`} onClick={() => setView('calendar')}>
+            <span className="view-nav-icon">📅</span> Календарь
+          </button>
+        </div>
+
         <SubjectList
           subjects={subjects}
           selectedSubjectId={selectedSubjectId}
-          onSelect={setSelectedSubjectId}
+          onSelect={(id) => { setSelectedSubjectId(id); if (view !== 'tasks') setView('tasks') }}
           onCreate={handleCreateSubject}
           onUpdate={handleUpdateSubject}
           onDelete={handleDeleteSubject}
@@ -234,39 +307,68 @@ export default function App() {
         </div>
       </div>
 
-      <div className="main-panel">
-        <TaskList
-          subject={selectedSubject}
-          tasks={tasks}
-          allTags={tags}
-          selectedTaskId={selectedTaskId}
-          onSelectTask={setSelectedTaskId}
-          onCreateTask={handleCreateTask}
-          onDeleteTask={handleDeleteTask}
-          onUpdateTask={handleUpdateTask}
-          onCompleteRecurring={handleCompleteRecurring}
-        />
-      </div>
+      {/* ── Tasks view ────────────────────────────────────────────────────── */}
+      {view === 'tasks' && (
+        <>
+          <div className="main-panel">
+            <TaskList
+              subject={selectedSubject}
+              tasks={tasks}
+              allTags={tags}
+              selectedTaskId={selectedTaskId}
+              onSelectTask={setSelectedTaskId}
+              onCreateTask={handleCreateTask}
+              onDeleteTask={handleDeleteTask}
+              onUpdateTask={handleUpdateTask}
+              onCompleteRecurring={handleCompleteRecurring}
+            />
+          </div>
 
-      {selectedTask && (
-        <div className="detail-panel">
-          <TaskDetail
-            task={selectedTask}
-            attachments={attachments}
-            subtasks={subtasks}
-            allTags={tags}
-            onUpdate={handleUpdateTask}
-            onCompleteRecurring={handleCompleteRecurring}
-            onSetTaskTags={handleSetTaskTags}
-            onCreateTag={handleCreateTag}
-            onAddAttachment={handleAddAttachment}
-            onDeleteAttachment={handleDeleteAttachment}
-            onOpenAttachment={handleOpenAttachment}
-            onCreateSubtask={handleCreateSubtask}
-            onUpdateSubtask={handleUpdateSubtask}
-            onDeleteSubtask={handleDeleteSubtask}
-            onReorderSubtasks={handleReorderSubtasks}
-            onClose={() => setSelectedTaskId(null)}
+          {selectedTask && (
+            <div className="detail-panel">
+              <TaskDetail
+                task={selectedTask}
+                attachments={attachments}
+                subtasks={subtasks}
+                allTags={tags}
+                onUpdate={handleUpdateTask}
+                onCompleteRecurring={handleCompleteRecurring}
+                onSetTaskTags={handleSetTaskTags}
+                onCreateTag={handleCreateTag}
+                onAddAttachment={handleAddAttachment}
+                onDeleteAttachment={handleDeleteAttachment}
+                onOpenAttachment={handleOpenAttachment}
+                onCreateSubtask={handleCreateSubtask}
+                onUpdateSubtask={handleUpdateSubtask}
+                onDeleteSubtask={handleDeleteSubtask}
+                onReorderSubtasks={handleReorderSubtasks}
+                onClose={() => setSelectedTaskId(null)}
+              />
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Schedule view ─────────────────────────────────────────────────── */}
+      {view === 'schedule' && (
+        <div className="full-content-panel">
+          <WeeklySchedule
+            entries={scheduleEntries}
+            subjects={subjects}
+            onCreate={handleCreateScheduleEntry}
+            onUpdate={handleUpdateScheduleEntry}
+            onDelete={handleDeleteScheduleEntry}
+          />
+        </div>
+      )}
+
+      {/* ── Calendar view ─────────────────────────────────────────────────── */}
+      {view === 'calendar' && (
+        <div className="full-content-panel">
+          <MonthCalendar
+            allTasks={allDeadlineTasks}
+            subjects={subjects}
+            onNavigateToTask={handleNavigateToTask}
           />
         </div>
       )}

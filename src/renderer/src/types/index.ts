@@ -54,3 +54,14 @@ export interface Attachment {
   mime_type:  string
   created_at: string
 }
+
+export interface ScheduleEntry {
+  id:          number
+  subject_id:  number | null
+  title:       string
+  day_of_week: number   // 0 = Monday … 6 = Sunday
+  start_time:  string   // 'HH:MM'
+  end_time:    string   // 'HH:MM'
+  location:    string | null
+  created_at:  string
+}

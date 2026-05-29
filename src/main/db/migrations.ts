@@ -96,6 +96,24 @@ const migrations: Migration[] = [
       db.exec(`ALTER TABLE tasks ADD COLUMN recurrence_rule TEXT;`)
       db.exec(`ALTER TABLE tasks ADD COLUMN recurrence_parent_id INTEGER;`)
     }
+  },
+  {
+    version: 5,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS schedule_entries (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          subject_id  INTEGER REFERENCES subjects(id) ON DELETE SET NULL,
+          title       TEXT    NOT NULL,
+          day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+          start_time  TEXT    NOT NULL,
+          end_time    TEXT    NOT NULL,
+          location    TEXT,
+          created_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_schedule_day ON schedule_entries(day_of_week);
+      `)
+    }
   }
 ]
 

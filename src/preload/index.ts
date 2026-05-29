@@ -9,6 +9,7 @@ const api = {
   },
   tasks: {
     getBySubject:      (subjectId: number)         => ipcRenderer.invoke('tasks:getBySubject', subjectId),
+    getAllWithDeadline: ()                          => ipcRenderer.invoke('tasks:getAllWithDeadline'),
     create:            (data: unknown)             => ipcRenderer.invoke('tasks:create', data),
     update:            (id: number, data: unknown) => ipcRenderer.invoke('tasks:update', id, data),
     delete:            (id: number)                => ipcRenderer.invoke('tasks:delete', id),
@@ -33,6 +34,12 @@ const api = {
     update:      (id: number, data: { name?: string; color?: string }) => ipcRenderer.invoke('tags:update', id, data),
     delete:      (id: number)                                          => ipcRenderer.invoke('tags:delete', id),
     setTaskTags: (taskId: number, tagIds: number[])                    => ipcRenderer.invoke('tags:setTaskTags', taskId, tagIds)
+  },
+  schedule: {
+    getAll:  ()                            => ipcRenderer.invoke('schedule:getAll'),
+    create:  (data: unknown)               => ipcRenderer.invoke('schedule:create', data),
+    update:  (id: number, data: unknown)   => ipcRenderer.invoke('schedule:update', id, data),
+    delete:  (id: number)                  => ipcRenderer.invoke('schedule:delete', id)
   },
   settings: {
     get: (key: string)                => ipcRenderer.invoke('settings:get', key),

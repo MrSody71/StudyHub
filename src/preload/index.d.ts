@@ -1,4 +1,4 @@
-import type { Subject, Task, Attachment, Subtask, Tag } from '../renderer/src/types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry } from '../renderer/src/types'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
 
@@ -13,6 +13,7 @@ declare global {
       }
       tasks: {
         getBySubject:      (subjectId: number)                                        => Promise<IpcResult<Task[]>>
+        getAllWithDeadline: ()                                                         => Promise<IpcResult<Task[]>>
         create:            (data: Omit<Task, 'id' | 'created_at' | 'tags' | 'subtask_total' | 'subtask_done'>) => Promise<IpcResult<Task>>
         update:            (id: number, data: Partial<Omit<Task, 'id' | 'created_at' | 'subject_id' | 'tags' | 'subtask_total' | 'subtask_done'>>) => Promise<IpcResult<Task>>
         delete:            (id: number)                                               => Promise<IpcResult<null>>
@@ -37,6 +38,12 @@ declare global {
         update:      (id: number, data: { name?: string; color?: string })      => Promise<IpcResult<Tag>>
         delete:      (id: number)                                               => Promise<IpcResult<null>>
         setTaskTags: (taskId: number, tagIds: number[])                         => Promise<IpcResult<null>>
+      }
+      schedule: {
+        getAll:  ()                                                                   => Promise<IpcResult<ScheduleEntry[]>>
+        create:  (data: Omit<ScheduleEntry, 'id' | 'created_at'>)                   => Promise<IpcResult<ScheduleEntry>>
+        update:  (id: number, data: Partial<Omit<ScheduleEntry, 'id' | 'created_at'>>) => Promise<IpcResult<ScheduleEntry>>
+        delete:  (id: number)                                                         => Promise<IpcResult<null>>
       }
       settings: {
         get: (key: string)                => Promise<IpcResult<string | null>>

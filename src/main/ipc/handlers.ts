@@ -1,6 +1,6 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { getAllSubjects, createSubject, updateSubject, deleteSubject } from '../db/subjects'
-import { getTasksBySubject, createTask, updateTask, deleteTask, completeTaskAndSpawnNext } from '../db/tasks'
+import { getTasksBySubject, getAllTasksWithDeadline, createTask, updateTask, deleteTask, completeTaskAndSpawnNext } from '../db/tasks'
 import {
   getAttachmentsByTask, addAttachment, deleteAttachment, openAttachment
 } from '../db/attachments'
@@ -11,6 +11,9 @@ import {
   getAllTags, createTag, updateTag, deleteTag, setTaskTags
 } from '../db/tags'
 import { getSetting, setSetting } from '../db/settings'
+import {
+  getAllScheduleEntries, createScheduleEntry, updateScheduleEntry, deleteScheduleEntry
+} from '../db/schedule'
 
 function wrap<T>(fn: () => T): { success: true; data: T } | { success: false; error: string } {
   try {
@@ -30,11 +33,12 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('subjects:delete', (_e, id: number) => wrap(() => { deleteSubject(id); return null }))
 
   // ── Tasks ─────────────────────────────────────────────────────────────────
-  ipcMain.handle('tasks:getBySubject', (_e, subjectId: number) => wrap(() => getTasksBySubject(subjectId)))
-  ipcMain.handle('tasks:create', (_e, data) => wrap(() => createTask(data)))
-  ipcMain.handle('tasks:update', (_e, id: number, data) => wrap(() => updateTask(id, data)))
-  ipcMain.handle('tasks:delete', (_e, id: number) => wrap(() => { deleteTask(id); return null }))
-  ipcMain.handle('tasks:completeRecurring', (_e, id: number) => wrap(() => completeTaskAndSpawnNext(id)))
+  ipcMain.handle('tasks:getBySubject',        (_e, subjectId: number) => wrap(() => getTasksBySubject(subjectId)))
+  ipcMain.handle('tasks:getAllWithDeadline',   ()                     => wrap(() => getAllTasksWithDeadline()))
+  ipcMain.handle('tasks:create',              (_e, data)             => wrap(() => createTask(data)))
+  ipcMain.handle('tasks:update',              (_e, id: number, data) => wrap(() => updateTask(id, data)))
+  ipcMain.handle('tasks:delete',              (_e, id: number)       => wrap(() => { deleteTask(id); return null }))
+  ipcMain.handle('tasks:completeRecurring',   (_e, id: number)       => wrap(() => completeTaskAndSpawnNext(id)))
 
   // ── Attachments ───────────────────────────────────────────────────────────
   ipcMain.handle('attachments:getByTask', (_e, taskId: number) => wrap(() => getAttachmentsByTask(taskId)))
@@ -55,6 +59,12 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('tags:update', (_e, id: number, data: { name?: string; color?: string }) => wrap(() => updateTag(id, data)))
   ipcMain.handle('tags:delete', (_e, id: number) => wrap(() => { deleteTag(id); return null }))
   ipcMain.handle('tags:setTaskTags', (_e, taskId: number, tagIds: number[]) => wrap(() => { setTaskTags(taskId, tagIds); return null }))
+
+  // ── Schedule ─────────────────────────────────────────────────────────────
+  ipcMain.handle('schedule:getAll',    ()                          => wrap(() => getAllScheduleEntries()))
+  ipcMain.handle('schedule:create',    (_e, data)                 => wrap(() => createScheduleEntry(data)))
+  ipcMain.handle('schedule:update',    (_e, id: number, data)     => wrap(() => updateScheduleEntry(id, data)))
+  ipcMain.handle('schedule:delete',    (_e, id: number)           => wrap(() => { deleteScheduleEntry(id); return null }))
 
   // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', (_e, key: string) => wrap(() => getSetting(key)))

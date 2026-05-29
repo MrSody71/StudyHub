@@ -140,6 +140,13 @@ export function deleteTask(id: number): void {
   getDb().prepare('DELETE FROM tasks WHERE id = ?').run(id)
 }
 
+export function getAllTasksWithDeadline(): TaskRow[] {
+  const rows = getDb()
+    .prepare(`${WITH_COUNTS_SQL} WHERE t.due_date IS NOT NULL ORDER BY t.due_date ASC`)
+    .all() as RawRow[]
+  return rows.map(parseRaw)
+}
+
 // ── Recurring task completion ──────────────────────────────────────────────────
 
 function shiftDate(base: string | null, unit: string, interval: number): string {
