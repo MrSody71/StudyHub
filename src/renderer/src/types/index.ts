@@ -66,6 +66,49 @@ export interface ScheduleEntry {
   created_at:  string
 }
 
+export interface TaskStats {
+  total:      number
+  done:       number
+  inProgress: number
+  notStarted: number
+  overdue:    number
+}
+
+export interface SubjectProgress {
+  subject_id:    number
+  subject_name:  string
+  subject_color: string
+  total:         number
+  done:          number
+  pct:           number
+}
+
+export interface DeadlineTask {
+  id:            number
+  subject_id:    number
+  title:         string
+  due_date:      string
+  priority:      string
+  status:        string
+  subject_name:  string
+  subject_color: string
+}
+
+export interface DayActivity {
+  date:          string
+  total_seconds: number
+}
+
+export interface DashboardData {
+  taskStats:         TaskStats
+  subjectProgress:   SubjectProgress[]
+  upcomingDeadlines: DeadlineTask[]
+  weekStudySeconds:  number
+  activityByDay:     DayActivity[]
+  overallGpa:        number | null
+  streak:            number
+}
+
 export interface Note {
   id:         number
   subject_id: number

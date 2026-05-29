@@ -2827,3 +2827,348 @@ body {
   display: block;
   background: #525659;
 }
+
+/* ── Dashboard ────────────────────────────────────────────────────────────── */
+
+.dash-outer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.dash-header {
+  padding: 14px 24px 0;
+  flex-shrink: 0;
+}
+
+.dash-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.dash-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dash-row {
+  display: flex;
+  gap: 12px;
+}
+
+/* ── Stat cards row ───────────────────────────────────────────────────────── */
+
+.dash-stats-row {
+  flex-wrap: wrap;
+}
+
+.dash-stat-card {
+  flex: 1;
+  min-width: 110px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dash-stat-value {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.dash-stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-top: 2px;
+}
+
+.dash-stat-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ── Streak card ──────────────────────────────────────────────────────────── */
+
+.dash-streak-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  border-radius: var(--radius);
+  padding: 14px 20px;
+  box-shadow: var(--shadow-sm);
+  min-width: 110px;
+  gap: 2px;
+}
+
+.dash-streak-fire {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.dash-streak-num {
+  font-size: 30px;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+}
+
+.dash-streak-label {
+  font-size: 11px;
+  color: rgba(255,255,255,.75);
+  text-align: center;
+  line-height: 1.3;
+}
+
+/* ── Generic card ─────────────────────────────────────────────────────────── */
+
+.dash-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.dash-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.dash-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  padding: 16px 0;
+  text-align: center;
+}
+
+/* ── Main row ─────────────────────────────────────────────────────────────── */
+
+.dash-main-row {
+  align-items: flex-start;
+}
+
+.dash-progress-card {
+  flex: 1;
+  min-width: 0;
+  max-height: 360px;
+}
+
+.dash-deadlines-card {
+  flex: 1.2;
+  min-width: 0;
+  max-height: 360px;
+}
+
+/* ── Subject progress ─────────────────────────────────────────────────────── */
+
+.dash-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.dash-progress-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dash-progress-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+}
+
+.dash-progress-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dash-progress-name {
+  flex: 1;
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-progress-pct {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.dash-progress-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.dash-progress-track {
+  height: 5px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.dash-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+  opacity: .85;
+}
+
+/* ── Deadlines ────────────────────────────────────────────────────────────── */
+
+.dash-deadline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.dash-deadline-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition);
+  border: 1px solid transparent;
+}
+.dash-deadline-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+
+.dash-deadline-date {
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 52px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.dash-deadline-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-deadline-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-deadline-subject {
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 1px;
+}
+
+.dash-deadline-priority {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* ── Activity chart ───────────────────────────────────────────────────────── */
+
+.dash-activity-card {
+  flex: 1;
+}
+
+.dash-activity-week-total {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.dash-activity-chart {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  height: 80px;
+}
+
+.dash-activity-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  height: 100%;
+  position: relative;
+}
+
+.dash-activity-bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.dash-activity-bar {
+  width: 100%;
+  background: var(--accent);
+  opacity: .5;
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+  transition: height 0.3s ease;
+}
+.dash-activity-bar.today { opacity: 1; }
+
+.dash-activity-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}

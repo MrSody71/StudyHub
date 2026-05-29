@@ -17,6 +17,7 @@ import {
 import { createSession, getSessionStats } from '../db/sessions'
 import { getGradesBySubject, createGrade, updateGrade, deleteGrade, getSubjectGradeStats } from '../db/grades'
 import { getNotesBySubject, createNote, updateNote, deleteNote, searchNotes } from '../db/notes'
+import { getDashboardData } from '../db/dashboard'
 
 function wrap<T>(fn: () => T): { success: true; data: T } | { success: false; error: string } {
   try {
@@ -68,6 +69,9 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('schedule:create',    (_e, data)                 => wrap(() => createScheduleEntry(data)))
   ipcMain.handle('schedule:update',    (_e, id: number, data)     => wrap(() => updateScheduleEntry(id, data)))
   ipcMain.handle('schedule:delete',    (_e, id: number)           => wrap(() => { deleteScheduleEntry(id); return null }))
+
+  // ── Dashboard ────────────────────────────────────────────────────────────
+  ipcMain.handle('dashboard:getData', () => wrap(() => getDashboardData()))
 
   // ── Notes ────────────────────────────────────────────────────────────────
   ipcMain.handle('notes:getBySubject', (_e, subjectId: number) => wrap(() => getNotesBySubject(subjectId)))

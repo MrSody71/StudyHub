@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, Grade, SubjectGradeStat, Note, Theme } from './types'
+import Dashboard from './components/Dashboard'
 import SubjectList from './components/SubjectList'
 import TaskList from './components/TaskList'
 import TaskDetail from './components/TaskDetail'
@@ -13,7 +14,7 @@ import SettingsPanel from './components/SettingsPanel'
 import { usePomodoro } from './hooks/usePomodoro'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
-type AppView    = 'tasks' | 'schedule' | 'calendar' | 'timer'
+type AppView    = 'dashboard' | 'tasks' | 'schedule' | 'calendar' | 'timer'
 type SubjectTab = 'tasks' | 'grades' | 'notes'
 
 async function unwrap<T>(p: Promise<IpcResult<T>>): Promise<T> {
@@ -24,7 +25,8 @@ async function unwrap<T>(p: Promise<IpcResult<T>>): Promise<T> {
 
 export default function App() {
   const [theme, setTheme]                   = useState<Theme>('light')
-  const [view, setView]                     = useState<AppView>('tasks')
+  const [view, setView]                     = useState<AppView>('dashboard')
+  const [dashRefreshKey, setDashRefreshKey] = useState(0)
   const [subjects, setSubjects]             = useState<Subject[]>([])
   const [tasks, setTasks]                   = useState<Task[]>([])
   const [allDeadlineTasks, setAllDeadlineTasks] = useState<Task[]>([])
@@ -45,7 +47,10 @@ export default function App() {
   const [sessionVersion, setSessionVersion] = useState(0)
 
   // Pomodoro – instantiated at App level so it persists across view switches
-  const [pomState, pomControls] = usePomodoro(() => setSessionVersion((v) => v + 1))
+  const [pomState, pomControls] = usePomodoro(() => {
+    setSessionVersion((v) => v + 1)
+    setDashRefreshKey((k) => k + 1)
+  })
 
   // Used to auto-select a task after navigating from the calendar
   const autoSelectTaskRef = useRef<number | null>(null)
@@ -191,11 +196,13 @@ export default function App() {
     const t = await unwrap(window.api.tasks.create(data))
     setTasks((prev) => [t, ...prev])
     setSelectedTaskId(t.id)
+    setDashRefreshKey((k) => k + 1)
   }
 
   async function handleUpdateTask(id: number, data: Partial<Omit<Task, 'id' | 'created_at' | 'subject_id'>>) {
     const t = await unwrap(window.api.tasks.update(id, data))
     setTasks((prev) => prev.map((x) => x.id === id ? { ...x, ...t } : x))
+    setDashRefreshKey((k) => k + 1)
   }
 
   async function handleDeleteTask(id: number) {
@@ -203,6 +210,7 @@ export default function App() {
     await unwrap(window.api.tasks.delete(id))
     setTasks((prev) => prev.filter((t) => t.id !== id))
     if (selectedTaskId === id) setSelectedTaskId(null)
+    setDashRefreshKey((k) => k + 1)
   }
 
   async function handleCompleteRecurring(id: number) {
@@ -211,6 +219,7 @@ export default function App() {
       const updated = prev.map((t) => t.id === id ? { ...t, ...result.task } : t)
       return result.spawned ? [result.spawned, ...updated] : updated
     })
+    setDashRefreshKey((k) => k + 1)
   }
 
   // Navigate from calendar to a specific task
@@ -372,6 +381,9 @@ export default function App() {
 
         {/* View navigator */}
         <div className="view-nav">
+          <button className={`view-nav-btn${view === 'dashboard' ? ' active' : ''}`} onClick={() => setView('dashboard')}>
+            <span className="view-nav-icon">🏠</span> Дашборд
+          </button>
           <button className={`view-nav-btn${view === 'tasks'    ? ' active' : ''}`} onClick={() => setView('tasks')}>
             <span className="view-nav-icon">📋</span> Задания
           </button>
@@ -415,6 +427,19 @@ export default function App() {
           <button className="settings-btn" onClick={() => setShowSettings(true)}>⚙ Настройки</button>
         </div>
       </div>
+
+      {/* ── Dashboard view ───────────────────────────────────────────────── */}
+      {view === 'dashboard' && (
+        <div className="full-content-panel">
+          <Dashboard
+            refreshKey={dashRefreshKey}
+            gradeScale={gradeScale}
+            onNavigate={(subjectId, taskId) => {
+              handleNavigateToTask(subjectId, taskId)
+            }}
+          />
+        </div>
+      )}
 
       {/* ── Tasks view ────────────────────────────────────────────────────── */}
       {view === 'tasks' && (
@@ -504,7 +529,7 @@ export default function App() {
                 onUpdateSubtask={handleUpdateSubtask}
                 onDeleteSubtask={handleDeleteSubtask}
                 onReorderSubtasks={handleReorderSubtasks}
-                onSessionSaved={() => setSessionVersion((v) => v + 1)}
+                onSessionSaved={() => { setSessionVersion((v) => v + 1); setDashRefreshKey((k) => k + 1) }}
                 onClose={() => setSelectedTaskId(null)}
               />
             </div>
