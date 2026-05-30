@@ -8,6 +8,9 @@
     "start": "electron-vite dev",
     "build": "electron-vite build",
     "dist": "npm run build && electron-builder",
+    "generate:icon": "node scripts/generate-icon.js",
+    "build:win": "node scripts/generate-icon.js && electron-vite build && electron-builder --win nsis --x64",
+    "build:portable": "node scripts/generate-icon.js && electron-vite build && electron-builder --win portable --x64",
     "setup": "npm install --ignore-scripts && node node_modules/electron/install.js && npx electron-builder install-app-deps",
     "postinstall": "electron-builder install-app-deps"
   },

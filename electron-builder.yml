@@ -1,30 +1,76 @@
 appId: com.studyhub.app
 productName: StudyHub
+copyright: Copyright © 2024 StudyHub
+
 directories:
   output: dist
   buildResources: build
+
+# Application icon.
+# Replace build/icon.ico with your own 256×256+ .ico file.
+# Run `npm run generate:icon` to (re)create the blue placeholder.
+icon: build/icon.ico
+
 files:
   - out/**/*
   - node_modules/**/*
   - "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
   - "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
   - "!node_modules/.bin"
+
 asarUnpack:
   - "node_modules/better-sqlite3/**/*"
   - "node_modules/bindings/**/*"
   - "node_modules/file-uri-to-path/**/*"
+
+# ── Windows ───────────────────────────────────────────────────────────────────
 win:
+  icon: build/icon.ico
+  # Both targets are listed here so `npm run dist` builds everything at once.
+  # Use build:win / build:portable for individual targets (see package.json).
   target:
     - target: nsis
       arch: [x64]
     - target: portable
       arch: [x64]
+
 nsis:
+  # Two-click install (shows destination picker and options screen)
   oneClick: false
+  # Install per-user by default (no UAC prompt needed)
+  perMachine: false
+  allowElevation: true
   allowToChangeInstallationDirectory: true
+
+  # Shortcuts
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: StudyHub      # label shown on desktop and Start Menu
+
+  # Uninstaller entry in "Apps & features" / "Add or Remove Programs"
+  # (electron-builder registers it automatically; this controls the display name)
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+
+  # IMPORTANT: user data lives in %APPDATA%\studyhub (managed by Electron).
+  # Setting this to false (the default) means uninstalling the app does NOT
+  # delete the database or attached files — they survive reinstalls.
+  deleteAppDataOnUninstall: false
+
+  artifactName: StudyHub-Setup-${version}.exe
+
+portable:
+  # Single-file portable EXE — no installation required.
+  # User data is still stored in %APPDATA%\studyhub (Electron default),
+  # so the portable build shares data with any installed version.
+  artifactName: StudyHub-Portable-${version}.exe
+
+# ── macOS / Linux (kept for completeness) ────────────────────────────────────
 mac:
   target:
     - dmg
+
 linux:
   target:
     - AppImage
