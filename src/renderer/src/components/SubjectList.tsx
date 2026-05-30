@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import type { Subject, SubjectGradeStat, Semester } from '../types'
+import type { Subject, SubjectGradeStat, Semester, SubjectSort } from '../types'
+
+const SORT_OPTIONS: { value: SubjectSort; label: string; title: string }[] = [
+  { value: 'alpha',    label: 'А→Я',    title: 'По алфавиту' },
+  { value: 'semester', label: 'Сем.',   title: 'По семестру (новые сверху)' },
+  { value: 'grade',    label: 'Балл',   title: 'По среднему баллу (высокий сверху)' },
+]
 
 const COLORS = [
   '#ef4444','#f97316','#eab308','#22c55e',
@@ -14,11 +20,13 @@ interface Props {
   semesters:          Semester[]
   gradeStats?:        SubjectGradeStat[]
   gradeScale?:        number
+  subjectSort:        SubjectSort
   onSelect:           (id: number) => void
   onCreate:           (data: { name: string; color: string; description?: string | null; semester_id?: number | null }) => void
   onUpdate:           (id: number, data: Partial<Omit<Subject, 'id' | 'created_at'>>) => void
   onDelete:           (id: number) => void
   onArchive:          (id: number, archive: boolean) => void
+  onSortChange:       (sort: SubjectSort) => void
 }
 
 interface ModalState {
@@ -28,7 +36,7 @@ interface ModalState {
 
 export default function SubjectList({
   subjects, archivedSubjects, selectedSubjectId, semesters, gradeStats, gradeScale = 100,
-  onSelect, onCreate, onUpdate, onDelete, onArchive,
+  subjectSort, onSelect, onCreate, onUpdate, onDelete, onArchive, onSortChange,
 }: Props) {
   const [modal,       setModal]      = useState<ModalState>({ open: false, editing: null })
   const [name,        setName]       = useState('')
@@ -75,13 +83,44 @@ export default function SubjectList({
     }
   }
 
-  const filtered = search.trim()
-    ? subjects.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
-    : subjects
+  // Build a semester-order map (newest = created last = highest id → index 0)
+  const semOrderMap = new Map<number, number>(
+    [...semesters].sort((a, b) => b.id - a.id).map((s, i) => [s.id, i])
+  )
 
-  const filteredArchived = search.trim()
-    ? archivedSubjects.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
-    : archivedSubjects
+  function sortSubjects(list: Subject[]): Subject[] {
+    const copy = [...list]
+    if (subjectSort === 'alpha') {
+      copy.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+    } else if (subjectSort === 'semester') {
+      copy.sort((a, b) => {
+        const ai = a.semester_id !== null ? (semOrderMap.get(a.semester_id) ?? Infinity) : Infinity
+        const bi = b.semester_id !== null ? (semOrderMap.get(b.semester_id) ?? Infinity) : Infinity
+        if (ai !== bi) return ai - bi
+        return a.name.localeCompare(b.name, 'ru')
+      })
+    } else {
+      // grade: high weighted_avg first; no stats → end
+      copy.sort((a, b) => {
+        const ag = gradeStats?.find((g) => g.subject_id === a.id)
+        const bg = gradeStats?.find((g) => g.subject_id === b.id)
+        if (!ag && !bg) return a.name.localeCompare(b.name, 'ru')
+        if (!ag) return 1
+        if (!bg) return -1
+        if (ag.weighted_avg !== bg.weighted_avg) return bg.weighted_avg - ag.weighted_avg
+        return a.name.localeCompare(b.name, 'ru')
+      })
+    }
+    return copy
+  }
+
+  const q = search.trim().toLowerCase()
+  const filtered = sortSubjects(
+    q ? subjects.filter((s) => s.name.toLowerCase().includes(q)) : subjects
+  )
+  const filteredArchived = sortSubjects(
+    q ? archivedSubjects.filter((s) => s.name.toLowerCase().includes(q)) : archivedSubjects
+  )
 
   const displayList   = showArchive ? filteredArchived : filtered
   const activeSemName = (id: number | null) => semesters.find((s) => s.id === id)?.name
@@ -99,6 +138,19 @@ export default function SubjectList({
             {showArchive ? '← Активные' : `Архив (${archivedSubjects.length})`}
           </button>
         )}
+      </div>
+
+      <div className="subject-sort-row">
+        {SORT_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            className={`subject-sort-btn${subjectSort === opt.value ? ' active' : ''}`}
+            onClick={() => onSortChange(opt.value)}
+            title={opt.title}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
 
       <div style={{ padding: '0 8px 4px' }}>

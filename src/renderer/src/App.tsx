@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, Grade, SubjectGradeStat, Note, Semester, Theme } from './types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort } from './types'
 import Dashboard from './components/Dashboard'
 import SubjectList from './components/SubjectList'
 import SemesterManager from './components/SemesterManager'
@@ -46,6 +46,7 @@ export default function App() {
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
   const [selectedTaskId, setSelectedTaskId]       = useState<number | null>(null)
   const [showSettings, setShowSettings]     = useState(false)
+  const [subjectSort, setSubjectSort]       = useState<SubjectSort>('alpha')
   const [error, setError]                   = useState<string | null>(null)
 
   const [sessionVersion, setSessionVersion] = useState(0)
@@ -71,6 +72,7 @@ export default function App() {
     void loadScheduleEntries()
     void loadGradeStats()
     void loadGradeScale()
+    void loadSubjectSort()
   }, [])
 
   // Reload view-specific data when switching views
@@ -176,6 +178,20 @@ export default function App() {
       const r = await window.api.settings.get('grades.scale')
       if (r.success && r.data) setGradeScale(Number(r.data))
     } catch { /* keep default */ }
+  }
+
+  async function loadSubjectSort() {
+    try {
+      const r = await window.api.settings.get('subjects.sort')
+      if (r.success && r.data && ['alpha', 'semester', 'grade'].includes(r.data)) {
+        setSubjectSort(r.data as SubjectSort)
+      }
+    } catch { /* keep default */ }
+  }
+
+  async function handleSubjectSortChange(sort: SubjectSort) {
+    setSubjectSort(sort)
+    try { await window.api.settings.set('subjects.sort', sort) } catch { /* ignore */ }
   }
 
   async function loadAttachments(taskId: number) {
@@ -462,11 +478,13 @@ export default function App() {
           semesters={semesters}
           gradeStats={gradeStats}
           gradeScale={gradeScale}
+          subjectSort={subjectSort}
           onSelect={(id) => { setSelectedSubjectId(id); if (view !== 'tasks') setView('tasks') }}
           onCreate={handleCreateSubject}
           onUpdate={handleUpdateSubject}
           onDelete={handleDeleteSubject}
           onArchive={handleArchiveSubject}
+          onSortChange={handleSubjectSortChange}
         />
         <div className="sidebar-footer">
           <button className="semesters-btn" onClick={() => setShowSemesterMgr(true)}>

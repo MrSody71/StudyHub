@@ -1158,6 +1158,41 @@ body {
   overflow: hidden;
 }
 
+/* ── Subject sort row ────────────────────────────────────────────────────── */
+.subject-sort-row {
+  display: flex;
+  gap: 3px;
+  padding: 0 8px 6px;
+}
+
+.subject-sort-btn {
+  flex: 1;
+  padding: 3px 0;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: rgba(255,255,255,.4);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  white-space: nowrap;
+  line-height: 1.6;
+}
+
+.subject-sort-btn:hover {
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.75);
+  border-color: rgba(255,255,255,.2);
+}
+
+.subject-sort-btn.active {
+  background: rgba(129,140,248,.2);
+  color: #a5b4fc;
+  border-color: rgba(129,140,248,.4);
+}
+
 /* ── Sidebar search ───────────────────────────────────────────────────────── */
 .sidebar-search {
   width: 100%;
