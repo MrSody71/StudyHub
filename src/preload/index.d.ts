@@ -65,6 +65,7 @@ declare global {
       }
       grades: {
         getBySubject:    (subjectId: number)                                        => Promise<IpcResult<Grade[]>>
+        getAll:          ()                                                         => Promise<IpcResult<Grade[]>>
         create:          (data: Omit<Grade, 'id' | 'created_at'>)                  => Promise<IpcResult<Grade>>
         update:          (id: number, data: Partial<Omit<Grade, 'id' | 'created_at' | 'subject_id'>>) => Promise<IpcResult<Grade>>
         delete:          (id: number)                                               => Promise<IpcResult<null>>

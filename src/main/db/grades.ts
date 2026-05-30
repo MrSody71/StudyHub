@@ -75,6 +75,13 @@ export function deleteGrade(id: number): void {
   getDb().prepare('DELETE FROM grades WHERE id = ?').run(id)
 }
 
+/** All grades across all subjects (for client-side stats like median). */
+export function getAllGrades(): GradeRow[] {
+  return getDb()
+    .prepare('SELECT * FROM grades ORDER BY subject_id, date DESC, created_at DESC')
+    .all() as GradeRow[]
+}
+
 /** Weighted average per subject (ratio 0–1), only subjects that have at least one grade. */
 export function getSubjectGradeStats(): SubjectGradeStat[] {
   return getDb().prepare(`

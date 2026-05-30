@@ -37,6 +37,7 @@ export default function App() {
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([])
   const [tags, setTags]                     = useState<Tag[]>([])
   const [grades, setGrades]                 = useState<Grade[]>([])
+  const [allGrades, setAllGrades]           = useState<Grade[]>([])
   const [gradeStats, setGradeStats]         = useState<SubjectGradeStat[]>([])
   const [gradeScale, setGradeScale]         = useState(100)
   const [notes, setNotes]                   = useState<Note[]>([])
@@ -71,6 +72,7 @@ export default function App() {
     void loadTags()
     void loadScheduleEntries()
     void loadGradeStats()
+    void loadAllGrades()
     void loadGradeScale()
     void loadSubjectSort()
   }, [])
@@ -165,6 +167,11 @@ export default function App() {
 
   async function loadGradeStats() {
     try { setGradeStats(await unwrap(window.api.grades.getSubjectStats())) }
+    catch (e) { setError(String(e)) }
+  }
+
+  async function loadAllGrades() {
+    try { setAllGrades(await unwrap(window.api.grades.getAll())) }
     catch (e) { setError(String(e)) }
   }
 
@@ -389,18 +396,21 @@ export default function App() {
   async function handleCreateGrade(data: Omit<Grade, 'id' | 'created_at'>) {
     const g = await unwrap(window.api.grades.create(data))
     setGrades((prev) => [g, ...prev])
+    setAllGrades((prev) => [g, ...prev])
     void loadGradeStats()
   }
 
   async function handleUpdateGrade(id: number, data: Partial<Omit<Grade, 'id' | 'created_at' | 'subject_id'>>) {
     const g = await unwrap(window.api.grades.update(id, data))
     setGrades((prev) => prev.map((x) => x.id === id ? g : x))
+    setAllGrades((prev) => prev.map((x) => x.id === id ? g : x))
     void loadGradeStats()
   }
 
   async function handleDeleteGrade(id: number) {
     await unwrap(window.api.grades.delete(id))
     setGrades((prev) => prev.filter((g) => g.id !== id))
+    setAllGrades((prev) => prev.filter((g) => g.id !== id))
     void loadGradeStats()
   }
 
@@ -518,6 +528,8 @@ export default function App() {
             refreshKey={dashRefreshKey}
             gradeScale={gradeScale}
             semesters={semesters}
+            gradeStats={gradeStats}
+            allGrades={allGrades}
             onNavigate={(subjectId, taskId) => {
               handleNavigateToTask(subjectId, taskId)
             }}

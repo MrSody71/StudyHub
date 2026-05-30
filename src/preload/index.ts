@@ -61,6 +61,7 @@ const api = {
   },
   grades: {
     getBySubject:    (subjectId: number)          => ipcRenderer.invoke('grades:getBySubject', subjectId),
+    getAll:          ()                           => ipcRenderer.invoke('grades:getAll'),
     create:          (data: unknown)              => ipcRenderer.invoke('grades:create', data),
     update:          (id: number, data: unknown)  => ipcRenderer.invoke('grades:update', id, data),
     delete:          (id: number)                 => ipcRenderer.invoke('grades:delete', id),

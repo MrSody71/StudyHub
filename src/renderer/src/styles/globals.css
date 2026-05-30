@@ -2434,6 +2434,104 @@ body {
   text-align: right;
 }
 
+/* ── Grade stats section (histogram + pills) ─────────────────────────────── */
+
+.grade-stats-section {
+  margin: 12px 16px 0;
+  padding: 14px 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.grade-histogram { display: flex; flex-direction: column; gap: 6px; }
+
+.grade-histogram-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-tertiary);
+}
+
+.grade-histogram-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 72px;
+}
+
+.grade-histogram-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+}
+
+.grade-histogram-count {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  min-height: 12px;
+}
+
+.grade-histogram-bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.grade-histogram-bar {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  min-height: 4px;
+  transition: opacity var(--transition);
+}
+
+.grade-histogram-bar:hover { opacity: .75; }
+
+.grade-histogram-label {
+  font-size: 9.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+/* Median / mode / count pills */
+
+.grade-stat-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.grade-stat-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-hover);
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.grade-stat-pill-label {
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.grade-stat-pill-value {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
 /* Modal grade preview */
 
 .grade-modal-preview {
@@ -3231,6 +3329,62 @@ body {
   height: 5px;
   border-radius: 50%;
   background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ── Dashboard grade summary table ─────────────────────────────────────── */
+
+.dash-grades-card { flex: 1; }
+
+.dash-grades-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dash-grades-th {
+  padding: 6px 10px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.dash-grades-th-num { text-align: right; }
+
+.dash-grades-row { transition: background var(--transition); }
+.dash-grades-row:hover { background: var(--bg-hover); }
+
+.dash-grades-td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  display: table-cell;
+  vertical-align: middle;
+}
+
+.dash-grades-td-num {
+  text-align: right;
+  font-weight: 600;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-grades-count { color: var(--text-secondary) !important; font-weight: 500 !important; }
+
+.dash-grades-row:last-child .dash-grades-td { border-bottom: none; }
+
+.dash-grades-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
   flex-shrink: 0;
 }
 

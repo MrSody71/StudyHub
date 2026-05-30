@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import type { DashboardData, Semester } from '../types'
+import type { DashboardData, Semester, SubjectGradeStat, Grade } from '../types'
 
 interface Props {
   refreshKey:  number
   gradeScale:  number
   semesters:   Semester[]
+  gradeStats:  SubjectGradeStat[]
+  allGrades:   Grade[]
   onNavigate:  (subjectId: number, taskId: number) => void
 }
 
@@ -36,6 +38,20 @@ function deadlineColor(daysLeft: number): string {
   if (daysLeft <= 1) return 'var(--danger)'
   if (daysLeft <= 3) return 'var(--warning)'
   return 'var(--success)'
+}
+
+function gradeColor(ratio: number): string {
+  if (ratio >= 0.85) return 'var(--success)'
+  if (ratio >= 0.70) return 'var(--accent)'
+  if (ratio >= 0.55) return 'var(--warning)'
+  return 'var(--danger)'
+}
+
+function calcMedianRatio(grades: Grade[]): number | null {
+  if (!grades.length) return null
+  const sorted = [...grades].map((g) => g.value / g.max_value).sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
 }
 
 const PRIORITY_RU: Record<string, string> = { high: 'Высокий', medium: 'Средний', low: 'Низкий' }
@@ -97,7 +113,7 @@ function ActivityChart({ days, maxSeconds }: { days: DashboardData['activityByDa
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function Dashboard({ refreshKey, gradeScale, semesters, onNavigate }: Props) {
+export default function Dashboard({ refreshKey, gradeScale, semesters, gradeStats, allGrades, onNavigate }: Props) {
   const [data,               setData]               = useState<DashboardData | null>(null)
   const [loading,            setLoading]            = useState(true)
   const [error,              setError]              = useState<string | null>(null)
@@ -279,6 +295,54 @@ export default function Dashboard({ refreshKey, gradeScale, semesters, onNavigat
             )}
           </div>
         </div>
+
+        {/* ── Row 4: Grade summary table ─────────────────────────────── */}
+        {gradeStats.length > 0 && (
+          <div className="dash-row">
+            <div className="dash-card dash-grades-card">
+              <div className="dash-card-title">Успеваемость по предметам</div>
+              <table className="dash-grades-table">
+                <thead>
+                  <tr>
+                    <th className="dash-grades-th">Предмет</th>
+                    <th className="dash-grades-th dash-grades-th-num">Ср. балл</th>
+                    <th className="dash-grades-th dash-grades-th-num">Медиана</th>
+                    <th className="dash-grades-th dash-grades-th-num">Оценок</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...gradeStats]
+                    .sort((a, b) => b.weighted_avg - a.weighted_avg)
+                    .map((s) => {
+                      const subjGrades = allGrades.filter((g) => g.subject_id === s.subject_id)
+                      const medRatio   = calcMedianRatio(subjGrades)
+                      return (
+                        <tr key={s.subject_id} className="dash-grades-row">
+                          <td className="dash-grades-td">
+                            <span className="dash-grades-dot" style={{ background: s.subject_color }} />
+                            {s.subject_name}
+                          </td>
+                          <td className="dash-grades-td dash-grades-td-num"
+                              style={{ color: gradeColor(s.weighted_avg) }}>
+                            {(s.weighted_avg * gradeScale).toFixed(gradeScale <= 10 ? 2 : 1)}
+                          </td>
+                          <td className="dash-grades-td dash-grades-td-num"
+                              style={{ color: medRatio !== null ? gradeColor(medRatio) : undefined }}>
+                            {medRatio !== null
+                              ? (medRatio * gradeScale).toFixed(gradeScale <= 10 ? 2 : 1)
+                              : '—'}
+                          </td>
+                          <td className="dash-grades-td dash-grades-td-num dash-grades-count">
+                            {s.grade_count}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

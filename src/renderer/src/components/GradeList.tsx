@@ -31,6 +31,82 @@ function gradeColor(ratio: number): string {
   return '#ef4444'
 }
 
+/** Display value on the current scale, rounded to appropriate precision. */
+function displayVal(g: Grade, scale: number): number {
+  const raw = (g.value / g.max_value) * scale
+  return scale <= 10 ? Math.round(raw * 10) / 10 : Math.round(raw)
+}
+
+function buildHistogram(grades: Grade[], scale: number): { value: number; count: number }[] {
+  const counts = new Map<number, number>()
+  for (const g of grades) {
+    const v = displayVal(g, scale)
+    counts.set(v, (counts.get(v) ?? 0) + 1)
+  }
+  return Array.from(counts.entries())
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value - b.value)
+}
+
+function calcMedian(grades: Grade[], scale: number): number | null {
+  if (!grades.length) return null
+  const sorted = [...grades].map((g) => displayVal(g, scale)).sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+}
+
+function calcMode(grades: Grade[], scale: number): number | null {
+  if (grades.length < 2) return null
+  const counts = new Map<number, number>()
+  for (const g of grades) {
+    const v = displayVal(g, scale)
+    counts.set(v, (counts.get(v) ?? 0) + 1)
+  }
+  const maxCount = Math.max(...counts.values())
+  // No mode if all values appear equally often
+  if ([...counts.values()].every((c) => c === maxCount)) return null
+  // Return the highest-count value; ties broken by highest grade (modal "good score")
+  let best = -Infinity
+  for (const [v, c] of counts) {
+    if (c === maxCount && v > best) best = v
+  }
+  return best
+}
+
+// ── Histogram sub-component ───────────────────────────────────────────────────
+
+function GradeHistogram({ grades, scale }: { grades: Grade[]; scale: number }) {
+  const bars = buildHistogram(grades, scale)
+  if (bars.length < 2) return null
+  const maxCount = Math.max(...bars.map((b) => b.count))
+  const fmtVal = (v: number) => scale <= 10 ? v.toFixed(1).replace('.0', '') : String(v)
+  return (
+    <div className="grade-histogram">
+      <div className="grade-histogram-title">Распределение оценок</div>
+      <div className="grade-histogram-bars">
+        {bars.map((b) => {
+          const heightPct = (b.count / maxCount) * 100
+          const ratio = b.value / scale
+          const color = gradeColor(ratio)
+          return (
+            <div key={b.value} className="grade-histogram-col">
+              <div className="grade-histogram-count" style={{ color }}>{b.count}</div>
+              <div className="grade-histogram-bar-wrap">
+                <div
+                  className="grade-histogram-bar"
+                  style={{ height: `${Math.max(heightPct, 8)}%`, background: color }}
+                  title={`${fmtVal(b.value)}: ${b.count} раз`}
+                />
+              </div>
+              <div className="grade-histogram-label">{fmtVal(b.value)}</div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
 interface ModalProps {
@@ -189,8 +265,11 @@ export default function GradeList({ subject, grades, scale, onCreate, onUpdate, 
   const [editing, setEditing] = useState<Grade | null>(null)
   const [showModal, setShowModal] = useState(false)
 
-  const avg = weightedAvg(grades)
-  const color = subject.color
+  const avg    = weightedAvg(grades)
+  const median = calcMedian(grades, scale)
+  const mode   = calcMode(grades, scale)
+  const color  = subject.color
+  const fmtV   = (v: number) => scale <= 10 ? v.toFixed(1).replace('.0', '') : String(v)
 
   function openCreate() { setEditing(null); setShowModal(true) }
   function openEdit(g: Grade) { setEditing(g); setShowModal(true) }
@@ -236,6 +315,35 @@ export default function GradeList({ subject, grades, scale, onCreate, onUpdate, 
           <div className="grade-avg-pct">{Math.round(avg * 100)}%</div>
           <div className="grade-avg-bar-track">
             <div className="grade-avg-bar-fill" style={{ width: `${avg * 100}%`, background: gradeColor(avg) }} />
+          </div>
+        </div>
+      )}
+
+      {/* Stats: histogram + median / mode */}
+      {grades.length >= 2 && (
+        <div className="grade-stats-section">
+          <GradeHistogram grades={grades} scale={scale} />
+          <div className="grade-stat-pills">
+            {median !== null && (
+              <div className="grade-stat-pill">
+                <span className="grade-stat-pill-label">Медиана</span>
+                <span className="grade-stat-pill-value" style={{ color: gradeColor(median / scale) }}>
+                  {fmtV(median)}
+                </span>
+              </div>
+            )}
+            {mode !== null && (
+              <div className="grade-stat-pill">
+                <span className="grade-stat-pill-label">Мода</span>
+                <span className="grade-stat-pill-value" style={{ color: gradeColor(mode / scale) }}>
+                  {fmtV(mode)}
+                </span>
+              </div>
+            )}
+            <div className="grade-stat-pill">
+              <span className="grade-stat-pill-label">Оценок</span>
+              <span className="grade-stat-pill-value">{grades.length}</span>
+            </div>
           </div>
         </div>
       )}

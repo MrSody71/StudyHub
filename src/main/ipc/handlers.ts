@@ -16,7 +16,7 @@ import {
   getAllScheduleEntries, createScheduleEntry, updateScheduleEntry, deleteScheduleEntry
 } from '../db/schedule'
 import { createSession, getSessionStats } from '../db/sessions'
-import { getGradesBySubject, createGrade, updateGrade, deleteGrade, getSubjectGradeStats } from '../db/grades'
+import { getGradesBySubject, createGrade, updateGrade, deleteGrade, getSubjectGradeStats, getAllGrades } from '../db/grades'
 import { getNotesBySubject, createNote, updateNote, deleteNote, searchNotes } from '../db/notes'
 import { getDashboardData } from '../db/dashboard'
 
@@ -91,6 +91,7 @@ export function setupIpcHandlers(): void {
 
   // ── Grades ────────────────────────────────────────────────────────────────
   ipcMain.handle('grades:getBySubject',  (_e, subjectId: number) => wrap(() => getGradesBySubject(subjectId)))
+  ipcMain.handle('grades:getAll',        ()                     => wrap(() => getAllGrades()))
   ipcMain.handle('grades:create',        (_e, data)             => wrap(() => createGrade(data)))
   ipcMain.handle('grades:update',        (_e, id: number, data) => wrap(() => updateGrade(id, data)))
   ipcMain.handle('grades:delete',        (_e, id: number)       => wrap(() => { deleteGrade(id); return null }))
