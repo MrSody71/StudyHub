@@ -2,6 +2,21 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; overflow: hidden; }
 
+/* Normalize all native form elements to inherit the app theme.
+   Individual component classes may override these with higher specificity. */
+input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition), background-color var(--transition), color var(--transition);
+}
+input::placeholder, textarea::placeholder { color: var(--text-tertiary); }
+select { cursor: pointer; }
+
 /* ── Theme variables ────────────────────────────────────────────────────── */
 :root {
   --bg-app:         #f0f2f5;
@@ -49,6 +64,8 @@ html, body, #root { height: 100%; overflow: hidden; }
   --sidebar-w: 230px;
   --detail-w:  320px;
   --header-h:  52px;
+
+  color-scheme: light;
 }
 
 [data-theme="dark"] {
@@ -88,6 +105,8 @@ html, body, #root { height: 100%; overflow: hidden; }
   --shadow-sm:  0 1px 2px rgba(0,0,0,.3);
   --shadow-md:  0 4px 6px rgba(0,0,0,.3);
   --shadow-lg:  0 10px 15px rgba(0,0,0,.4);
+
+  color-scheme: dark;
 }
 
 /* ── Base ───────────────────────────────────────────────────────────────── */
@@ -907,7 +926,7 @@ body {
   font-family: inherit;
   font-size: 13.5px;
   outline: none;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), background-color var(--transition), color var(--transition);
 }
 
 .form-input:focus,
@@ -951,7 +970,7 @@ body {
   font-size: 13px;
   outline: none;
   cursor: pointer;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), background-color var(--transition), color var(--transition);
   width: 100%;
 }
 
@@ -1170,7 +1189,7 @@ body {
   font-family: inherit;
   font-size: 13px;
   outline: none;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), background-color var(--transition), color var(--transition);
 }
 
 .search-input:focus { border-color: var(--border-focus); }
@@ -3193,7 +3212,7 @@ body {
   font-size: 13px;
   outline: none;
   cursor: pointer;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), background-color var(--transition), color var(--transition);
 }
 .dash-semester-select:focus { border-color: var(--border-focus); }
 
