@@ -6,6 +6,9 @@ directories:
   output: dist
   buildResources: build
 
+# Use the already-installed local electron instead of downloading it again.
+electronDist: node_modules/electron/dist
+
 # Application icon.
 # Replace build/icon.ico with your own 256×256+ .ico file.
 # Run `npm run generate:icon` to (re)create the blue placeholder.
