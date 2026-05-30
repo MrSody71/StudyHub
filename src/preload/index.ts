@@ -27,7 +27,9 @@ const api = {
     getByTask: (taskId: number)                   => ipcRenderer.invoke('attachments:getByTask', taskId),
     add:       (taskId: number, filePath: string) => ipcRenderer.invoke('attachments:add', taskId, filePath),
     delete:    (id: number)                       => ipcRenderer.invoke('attachments:delete', id),
-    open:      (id: number)                       => ipcRenderer.invoke('attachments:open', id)
+    open:      (id: number)                       => ipcRenderer.invoke('attachments:open', id),
+    export:    (files: Array<{ filepath: string; filename: string }>, destDir: string) =>
+                 ipcRenderer.invoke('attachments:export', files, destDir)
   },
   subtasks: {
     getByTask: (taskId: number)                                    => ipcRenderer.invoke('subtasks:getByTask', taskId),
@@ -79,7 +81,8 @@ const api = {
     set: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value)
   },
   dialog: {
-    openFile: () => ipcRenderer.invoke('dialog:openFile')
+    openFile:      () => ipcRenderer.invoke('dialog:openFile'),
+    openDirectory: () => ipcRenderer.invoke('dialog:openDirectory')
   }
 }
 

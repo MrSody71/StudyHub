@@ -345,6 +345,210 @@ function ProgressBar({ total, done }: { total: number; done: number }) {
   )
 }
 
+// ── Export attachments dialog ─────────────────────────────────────────────────
+
+function ExportAttachmentsDialog({
+  attachments,
+  onClose,
+}: {
+  attachments: Attachment[]
+  onClose: () => void
+}) {
+  const [minMb,    setMinMb]   = useState('')
+  const [maxMb,    setMaxMb]   = useState('')
+  const [destDir,  setDestDir] = useState('')
+  const [loading,  setLoading] = useState(false)
+  const [result,   setResult]  = useState<{ count: number; destDir: string } | null>(null)
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const minBytes = minMb !== '' ? parseFloat(minMb) * 1024 * 1024 : null
+  const maxBytes = maxMb !== '' ? parseFloat(maxMb) * 1024 * 1024 : null
+
+  const filtered = attachments.filter((a) => {
+    if (minBytes !== null && a.size < minBytes) return false
+    if (maxBytes !== null && a.size > maxBytes) return false
+    return true
+  })
+
+  async function handlePickFolder() {
+    const res = await window.api.dialog.openDirectory()
+    if (res.success && res.data) setDestDir(res.data)
+  }
+
+  async function handleExport() {
+    if (!destDir || filtered.length === 0 || loading) return
+    setLoading(true)
+    try {
+      const files = filtered.map((a) => ({ filepath: a.filepath, filename: a.filename }))
+      const res = await window.api.attachments.export(files, destDir)
+      if (res.success) {
+        setResult(res.data)
+        await window.api.notifications.show(
+          'Выгрузка завершена',
+          `Скопировано файлов: ${res.data.count} → ${res.data.destDir}`
+        )
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ width: 500 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">Выгрузить файлы</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        {result ? (
+          <div className="modal-body">
+            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+              <div style={{ fontSize: 32, marginBottom: 10 }}>✅</div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                Скопировано файлов: {result.count}
+              </div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: 13, wordBreak: 'break-all' }}>
+                {result.destDir}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="modal-body">
+              {/* Size filter */}
+              <div style={{ marginBottom: 16 }}>
+                <div className="detail-section-label" style={{ marginBottom: 8 }}>
+                  Фильтр по размеру (МБ)
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    placeholder="от"
+                    value={minMb}
+                    onChange={(e) => setMinMb(e.target.value)}
+                    style={{ width: 90 }}
+                    className="form-input"
+                  />
+                  <span style={{ color: 'var(--text-secondary)' }}>—</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    placeholder="до"
+                    value={maxMb}
+                    onChange={(e) => setMaxMb(e.target.value)}
+                    style={{ width: 90 }}
+                    className="form-input"
+                  />
+                </div>
+              </div>
+
+              {/* Destination folder */}
+              <div style={{ marginBottom: 16 }}>
+                <div className="detail-section-label" style={{ marginBottom: 8 }}>
+                  Папка назначения
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div
+                    style={{
+                      flex: 1,
+                      padding: '6px 10px',
+                      background: 'var(--bg-input)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: 13,
+                      color: destDir ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={destDir}
+                  >
+                    {destDir || 'Папка не выбрана'}
+                  </div>
+                  <button className="btn btn-secondary btn-sm" onClick={handlePickFolder}>
+                    Выбрать…
+                  </button>
+                </div>
+              </div>
+
+              {/* File preview list */}
+              <div>
+                <div className="detail-section-label" style={{ marginBottom: 8 }}>
+                  Файлы под фильтр ({filtered.length})
+                </div>
+                {filtered.length === 0 ? (
+                  <div style={{ color: 'var(--text-tertiary)', fontSize: 13, padding: '8px 0' }}>
+                    Нет файлов, подходящих под фильтр
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      maxHeight: 200,
+                      overflowY: 'auto',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--radius-sm)',
+                    }}
+                  >
+                    {filtered.map((a) => (
+                      <div
+                        key={a.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '6px 10px',
+                          fontSize: 13,
+                          borderBottom: '1px solid var(--border-color)',
+                        }}
+                      >
+                        <span
+                          style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            flex: 1,
+                            marginRight: 12,
+                          }}
+                          title={a.filename}
+                        >
+                          {fileIcon(a.mime_type)} {a.filename}
+                        </span>
+                        <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>
+                          {formatSize(a.size)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-secondary" onClick={onClose}>Отмена</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => void handleExport()}
+                disabled={!destDir || filtered.length === 0 || loading}
+              >
+                {loading ? 'Копирование…' : `Выгрузить (${filtered.length})`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Attachment section ────────────────────────────────────────────────────────
 
 interface AttachmentSectionProps {
@@ -355,8 +559,9 @@ interface AttachmentSectionProps {
 }
 
 function AttachmentSection({ attachments, onAdd, onDelete, onOpen }: AttachmentSectionProps) {
-  const [lightbox, setLightbox] = useState<Attachment | null>(null)
-  const [pdfView,  setPdfView]  = useState<Attachment | null>(null)
+  const [lightbox,       setLightbox]       = useState<Attachment | null>(null)
+  const [pdfView,        setPdfView]        = useState<Attachment | null>(null)
+  const [exportOpen,     setExportOpen]     = useState(false)
 
   // Image thumbnails row (up to 4 visible)
   const images  = attachments.filter((a) => isImage(a.mime_type))
@@ -378,12 +583,25 @@ function AttachmentSection({ attachments, onAdd, onDelete, onOpen }: AttachmentS
           onClose={() => setPdfView(null)}
         />
       )}
+      {exportOpen && (
+        <ExportAttachmentsDialog
+          attachments={attachments}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div className="detail-section-label" style={{ marginBottom: 0 }}>
           Вложения ({attachments.length})
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={onAdd}>+ Прикрепить файл</button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {attachments.length > 0 && (
+            <button className="btn btn-secondary btn-sm" onClick={() => setExportOpen(true)}>
+              Выгрузить файлы
+            </button>
+          )}
+          <button className="btn btn-secondary btn-sm" onClick={onAdd}>+ Прикрепить файл</button>
+        </div>
       </div>
 
       {attachments.length === 0 ? (

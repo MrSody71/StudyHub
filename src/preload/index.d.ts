@@ -32,6 +32,7 @@ declare global {
         add:       (taskId: number, filePath: string)   => Promise<IpcResult<Attachment>>
         delete:    (id: number)                         => Promise<IpcResult<null>>
         open:      (id: number)                         => Promise<IpcResult<null>>
+        export:    (files: Array<{ filepath: string; filename: string }>, destDir: string) => Promise<IpcResult<{ count: number; destDir: string }>>
       }
       subtasks: {
         getByTask: (taskId: number)                                          => Promise<IpcResult<Subtask[]>>
@@ -83,7 +84,8 @@ declare global {
         set: (key: string, value: string) => Promise<IpcResult<null>>
       }
       dialog: {
-        openFile: () => Promise<IpcResult<string | null>>
+        openFile:      () => Promise<IpcResult<string | null>>
+        openDirectory: () => Promise<IpcResult<string | null>>
       }
     }
   }

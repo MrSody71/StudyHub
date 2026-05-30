@@ -1,4 +1,6 @@
 import { ipcMain, dialog, BrowserWindow, Notification } from 'electron'
+import fs from 'fs'
+import path from 'path'
 import { getAllSubjects, createSubject, updateSubject, deleteSubject, archiveSubject } from '../db/subjects'
 import { getAllSemesters, createSemester, updateSemester, deleteSemester, setActiveSemester } from '../db/semesters'
 import { getTasksBySubject, getAllTasksWithDeadline, createTask, updateTask, deleteTask, completeTaskAndSpawnNext } from '../db/tasks'
@@ -128,4 +130,51 @@ export function setupIpcHandlers(): void {
     if (result.canceled || result.filePaths.length === 0) return { success: true, data: null }
     return { success: true, data: result.filePaths[0] }
   })
+
+  ipcMain.handle('dialog:openDirectory', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return { success: false, error: 'No window' }
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Выберите папку для выгрузки',
+      properties: ['openDirectory']
+    })
+    if (result.canceled || result.filePaths.length === 0) return { success: true, data: null }
+    return { success: true, data: result.filePaths[0] }
+  })
+
+  ipcMain.handle(
+    'attachments:export',
+    (
+      _e,
+      files: Array<{ filepath: string; filename: string }>,
+      destDir: string
+    ) => {
+      try {
+        let count = 0
+        for (const file of files) {
+          if (!fs.existsSync(file.filepath)) continue
+
+          const ext      = path.extname(file.filename)
+          const base     = path.basename(file.filename, ext)
+          let destName   = file.filename
+          let destPath   = path.join(destDir, destName)
+          let suffix     = 1
+
+          while (fs.existsSync(destPath)) {
+            destName = `${base}_${suffix}${ext}`
+            destPath = path.join(destDir, destName)
+            suffix++
+          }
+
+          fs.copyFileSync(file.filepath, destPath)
+          count++
+        }
+        return { success: true, data: { count, destDir } }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[IPC Error] attachments:export', msg)
+        return { success: false, error: msg }
+      }
+    }
+  )
 }
