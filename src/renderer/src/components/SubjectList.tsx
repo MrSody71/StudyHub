@@ -124,7 +124,7 @@ export default function SubjectList({
             >
               <span className="subject-dot" style={{ background: s.color }} />
               <span className="subject-name">
-                {s.name}
+                <span className="subject-name-text">{s.name}</span>
                 {semName && <span className="subject-sem-badge">{semName}</span>}
               </span>
               {stat && !archived && (
@@ -220,7 +220,7 @@ export default function SubjectList({
                   <div className="form-group">
                     <label className="form-label">Семестр</label>
                     <select
-                      className="form-input"
+                      className="form-select"
                       value={semesterId}
                       onChange={(e) => setSemesterId(e.target.value === '' ? '' : Number(e.target.value))}
                     >

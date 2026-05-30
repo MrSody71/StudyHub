@@ -205,6 +205,13 @@ body {
 
 .subject-name {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.subject-name-text {
   font-size: 13.5px;
   font-weight: 500;
   white-space: nowrap;
@@ -3275,20 +3282,17 @@ body {
 }
 .subject-item.archived .subject-actions { pointer-events: all; }
 
-/* Semester badge on subject item */
+/* Semester badge on subject item — shown below the subject name */
 .subject-sem-badge {
-  font-size: 9px;
-  padding: 1px 5px;
-  border-radius: 8px;
-  background: rgba(255,255,255,.12);
-  color: var(--text-sidebar);
-  margin-left: 4px;
-  max-width: 70px;
+  font-size: 10px;
+  font-weight: 400;
+  color: rgba(255,255,255,.38);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  display: inline-block;
-  vertical-align: middle;
+  max-width: 100%;
+  display: block;
+  line-height: 1.2;
 }
 
 /* ── Semester Manager modal ─────────────────────────────────────────────── */
