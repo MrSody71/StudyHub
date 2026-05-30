@@ -5,7 +5,8 @@ import { getAllSubjects, createSubject, updateSubject, deleteSubject, archiveSub
 import { getAllSemesters, createSemester, updateSemester, deleteSemester, setActiveSemester } from '../db/semesters'
 import { getTasksBySubject, getAllTasksWithDeadline, createTask, updateTask, deleteTask, completeTaskAndSpawnNext } from '../db/tasks'
 import {
-  getAttachmentsByTask, addAttachment, deleteAttachment, openAttachment, addAttachmentMultiple
+  getAttachmentsByTask, addAttachment, deleteAttachment, openAttachment,
+  addAttachmentMultiple, addFolder,
 } from '../db/attachments'
 import {
   getSubtasksByTask, createSubtask, updateSubtask, deleteSubtask, reorderSubtasks
@@ -59,6 +60,7 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('attachments:getByTask',   (_e, taskId: number)                    => wrap(() => getAttachmentsByTask(taskId)))
   ipcMain.handle('attachments:add',         (_e, taskId: number, filePath: string)  => wrap(() => addAttachment(taskId, filePath)))
   ipcMain.handle('attachments:addMultiple', (_e, taskId: number, paths: string[])   => wrap(() => addAttachmentMultiple(taskId, paths)))
+  ipcMain.handle('attachments:addFolder',   (_e, taskId: number, src: string, name: string) => wrap(() => addFolder(taskId, src, name)))
   ipcMain.handle('attachments:delete',      (_e, id: number)                        => wrap(() => { deleteAttachment(id); return null }))
   ipcMain.handle('attachments:open',        (_e, id: number)                        => wrap(() => { openAttachment(id); return null }))
 

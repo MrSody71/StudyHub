@@ -698,6 +698,59 @@ body {
 .attachment-item:hover .attachment-del { opacity: 1; }
 .attachment-del:hover { color: var(--danger); background: var(--danger-light); }
 
+/* Folder attachment */
+.attachment-folder-item { display: flex; flex-direction: column; }
+
+.attachment-folder-expand {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--text-secondary);
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: transform var(--transition), color var(--transition);
+  transform: rotate(0deg);
+}
+.attachment-folder-expand.open { transform: rotate(90deg); }
+.attachment-folder-expand:hover { color: var(--accent); }
+
+.attachment-folder-tree {
+  margin: 2px 0 6px 44px;
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attachment-folder-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  font-size: 12px;
+}
+
+.attachment-folder-child-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.attachment-folder-child-size {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
 /* ── Subtask progress (in detail panel) ──────────────────────────────────── */
 .subtask-progress {
   margin-bottom: 12px;

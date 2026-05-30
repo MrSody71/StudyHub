@@ -197,6 +197,19 @@ const migrations: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_subjects_archived  ON subjects(is_archived);
       `)
     }
+  },
+  {
+    version: 10,
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE attachments ADD COLUMN is_folder             INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE attachments ADD COLUMN parent_attachment_id  INTEGER
+          REFERENCES attachments(id) ON DELETE CASCADE;
+
+        CREATE INDEX IF NOT EXISTS idx_attachments_parent ON attachments(parent_attachment_id);
+        CREATE INDEX IF NOT EXISTS idx_attachments_task   ON attachments(task_id);
+      `)
+    }
   }
 ]
 

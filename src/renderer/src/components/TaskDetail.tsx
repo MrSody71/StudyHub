@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import type { Task, Tag, Attachment, Subtask, TaskStatus, TaskPriority } from '../types'
 
 // ── Attachment preview helpers ────────────────────────────────────────────────
@@ -156,6 +156,7 @@ interface Props {
   onSetTaskTags:       (taskId: number, tagIds: number[]) => Promise<void>
   onCreateTag:         (name: string, color: string) => Promise<Tag>
   onAddAttachment:     (taskId: number, paths?: string[]) => void
+  onAddFolder:         (taskId: number, folderPath: string, displayName: string, replaceId?: number) => void
   onDeleteAttachment:  (id: number) => void
   onOpenAttachment:    (id: number) => void
   onCreateSubtask:     (taskId: number, title: string) => void
@@ -370,6 +371,8 @@ function ExportAttachmentsDialog({
   const maxBytes = maxMb !== '' ? parseFloat(maxMb) * 1024 * 1024 : null
 
   const filtered = attachments.filter((a) => {
+    if (a.is_folder) return false                       // exclude folder meta-rows
+    if (a.parent_attachment_id != null) return false    // exclude folder children
     if (minBytes !== null && a.size < minBytes) return false
     if (maxBytes !== null && a.size > maxBytes) return false
     return true
@@ -549,24 +552,105 @@ function ExportAttachmentsDialog({
   )
 }
 
+// ── Folder attachment item ────────────────────────────────────────────────────
+
+function FolderAttachmentItem({
+  folder,
+  children,
+  onDelete,
+  onOpen,
+}: {
+  folder:   Attachment
+  children: Attachment[]
+  onDelete: (id: number) => void
+  onOpen:   (id: number) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="attachment-folder-item">
+      <div
+        className="attachment-item"
+        style={{ cursor: 'default' }}
+        onDoubleClick={() => onOpen(folder.id)}
+        title="Двойной клик — открыть в проводнике"
+      >
+        <button
+          className={`attachment-folder-expand${expanded ? ' open' : ''}`}
+          onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v) }}
+          title={expanded ? 'Свернуть' : 'Развернуть'}
+        >
+          ›
+        </button>
+        <span className="attachment-icon">📁</span>
+        <div className="attachment-info">
+          <div className="attachment-name">{folder.filename}</div>
+          <div className="attachment-size">
+            {formatSize(folder.size)} · {children.length} файл(ов)
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => onOpen(folder.id)}
+            title="Открыть в проводнике"
+            style={{ fontSize: 12 }}
+          >
+            ↗
+          </button>
+          <button
+            className="attachment-del"
+            onClick={() => onDelete(folder.id)}
+            title="Удалить папку и все файлы"
+          >
+            🗑
+          </button>
+        </div>
+      </div>
+
+      {expanded && children.length > 0 && (
+        <div className="attachment-folder-tree">
+          {children.map((child) => (
+            <div key={child.id} className="attachment-folder-child">
+              <span style={{ fontSize: 14, flexShrink: 0 }}>{fileIcon(child.mime_type)}</span>
+              <span className="attachment-folder-child-name" title={child.filename}>
+                {child.filename}
+              </span>
+              <span className="attachment-folder-child-size">{formatSize(child.size)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Attachment section ────────────────────────────────────────────────────────
 
 interface AttachmentSectionProps {
-  attachments: Attachment[]
-  onAdd:    (paths?: string[]) => void
-  onDelete: (id: number) => void
-  onOpen:   (id: number) => void
+  attachments:  Attachment[]
+  onAdd:        (paths?: string[]) => void
+  onAddFolder:  (folderPath: string, displayName: string, replaceId?: number) => void
+  onDelete:     (id: number) => void
+  onOpen:       (id: number) => void
 }
 
-function AttachmentSection({ attachments, onAdd, onDelete, onOpen }: AttachmentSectionProps) {
-  const [lightbox,       setLightbox]       = useState<Attachment | null>(null)
-  const [pdfView,        setPdfView]        = useState<Attachment | null>(null)
-  const [exportOpen,     setExportOpen]     = useState(false)
-  const [dragOver,       setDragOver]       = useState(false)
+function AttachmentSection({ attachments, onAdd, onAddFolder, onDelete, onOpen }: AttachmentSectionProps) {
+  const [lightbox,      setLightbox]      = useState<Attachment | null>(null)
+  const [pdfView,       setPdfView]       = useState<Attachment | null>(null)
+  const [exportOpen,    setExportOpen]    = useState(false)
+  const [dragOver,      setDragOver]      = useState(false)
+  const [folderDupState, setFolderDupState] = useState<{
+    folderPath: string
+    folderName: string
+    existingId: number
+  } | null>(null)
 
-  // Image thumbnails row (up to 4 visible)
-  const images  = attachments.filter((a) => isImage(a.mime_type))
-  const others  = attachments.filter((a) => !isImage(a.mime_type))
+  // Partition attachments by type
+  const folders          = attachments.filter((a) => a.is_folder === 1)
+  const standaloneImages = attachments.filter((a) => !a.is_folder && !a.parent_attachment_id && isImage(a.mime_type))
+  const standaloneOthers = attachments.filter((a) => !a.is_folder && !a.parent_attachment_id && !isImage(a.mime_type))
+  const topLevelCount    = folders.length + standaloneImages.length + standaloneOthers.length
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault()
@@ -588,6 +672,38 @@ function AttachmentSection({ attachments, onAdd, onDelete, onOpen }: AttachmentS
       .map((f) => (f as unknown as { path: string }).path)
       .filter(Boolean)
     if (paths.length > 0) onAdd(paths)
+  }
+
+  async function handleAddFolderClick() {
+    const res = await window.api.dialog.openDirectory()
+    if (!res.success || !res.data) return
+    const folderPath = res.data
+    const folderName = folderPath.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? 'folder'
+
+    const existing = attachments.find((a) => a.is_folder === 1 && a.filename === folderName)
+    if (existing) {
+      setFolderDupState({ folderPath, folderName, existingId: existing.id })
+      return
+    }
+    onAddFolder(folderPath, folderName)
+  }
+
+  function handleFolderReplace() {
+    if (!folderDupState) return
+    onAddFolder(folderDupState.folderPath, folderDupState.folderName, folderDupState.existingId)
+    setFolderDupState(null)
+  }
+
+  function handleFolderRename() {
+    if (!folderDupState) return
+    const existingNames = attachments.filter((a) => a.is_folder === 1).map((a) => a.filename)
+    let i = 2
+    let newName = `${folderDupState.folderName}_${i}`
+    while (existingNames.includes(newName)) {
+      newName = `${folderDupState.folderName}_${++i}`
+    }
+    onAddFolder(folderDupState.folderPath, newName)
+    setFolderDupState(null)
   }
 
   return (
@@ -618,30 +734,82 @@ function AttachmentSection({ attachments, onAdd, onDelete, onOpen }: AttachmentS
         />
       )}
 
+      {/* Folder duplicate resolution modal */}
+      {folderDupState && (
+        <div className="modal-overlay" onClick={() => setFolderDupState(null)}>
+          <div className="modal" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Папка уже прикреплена</span>
+              <button className="modal-close" onClick={() => setFolderDupState(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: 0, fontSize: 14 }}>
+                Папка <strong>«{folderDupState.folderName}»</strong> уже прикреплена к этому заданию.
+              </p>
+              <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
+                Что сделать с новой версией?
+              </p>
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-secondary" onClick={() => setFolderDupState(null)}>
+                Отмена
+              </button>
+              <button className="btn btn-secondary" onClick={handleFolderRename}>
+                Переименовать
+              </button>
+              <button className="btn btn-primary" onClick={handleFolderReplace}>
+                Заменить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div className="detail-section-label" style={{ marginBottom: 0 }}>
-          Вложения ({attachments.length})
+          Вложения ({topLevelCount})
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {attachments.length > 0 && (
+          {topLevelCount > 0 && (
             <button className="btn btn-secondary btn-sm" onClick={() => setExportOpen(true)}>
               Выгрузить файлы
             </button>
           )}
-          <button className="btn btn-secondary btn-sm" onClick={() => onAdd()}>+ Прикрепить файлы</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => onAdd()}>
+            + Прикрепить файлы
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => void handleAddFolderClick()}>
+            📁 Прикрепить папку
+          </button>
         </div>
       </div>
 
-      {attachments.length === 0 ? (
+      {topLevelCount === 0 ? (
         <div style={{ color: 'var(--text-tertiary)', fontSize: 13, padding: '10px 0', textAlign: 'center' }}>
           Нет прикреплённых файлов · перетащите сюда
         </div>
       ) : (
         <>
-          {/* Image thumbnail strip */}
-          {images.length > 0 && (
+          {/* Folder items */}
+          {folders.length > 0 && (
+            <div className="attachment-list" style={{ marginBottom: standaloneImages.length + standaloneOthers.length > 0 ? 8 : 0 }}>
+              {folders.map((folder) => (
+                <FolderAttachmentItem
+                  key={folder.id}
+                  folder={folder}
+                  children={attachments.filter((a) => a.parent_attachment_id === folder.id)}
+                  onDelete={onDelete}
+                  onOpen={onOpen}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Standalone image thumbnail strip */}
+          {standaloneImages.length > 0 && (
             <div className="attachment-thumbs">
-              {images.map((a) => (
+              {standaloneImages.map((a) => (
                 <div
                   key={a.id}
                   className="attachment-thumb"
@@ -659,10 +827,10 @@ function AttachmentSection({ attachments, onAdd, onDelete, onOpen }: AttachmentS
             </div>
           )}
 
-          {/* Non-image list */}
-          {others.length > 0 && (
+          {/* Standalone non-image list */}
+          {standaloneOthers.length > 0 && (
             <div className="attachment-list">
-              {others.map((a) => {
+              {standaloneOthers.map((a) => {
                 const canPreview = isPdf(a.mime_type)
                 return (
                   <div
@@ -719,7 +887,7 @@ function AttachmentSection({ attachments, onAdd, onDelete, onOpen }: AttachmentS
 export default function TaskDetail({
   task, attachments, subtasks, allTags,
   onUpdate, onCompleteRecurring, onSetTaskTags, onCreateTag,
-  onAddAttachment, onDeleteAttachment, onOpenAttachment,
+  onAddAttachment, onAddFolder, onDeleteAttachment, onOpenAttachment,
   onCreateSubtask, onUpdateSubtask, onDeleteSubtask, onReorderSubtasks,
   onSessionSaved,
   onClose,
@@ -1150,6 +1318,7 @@ export default function TaskDetail({
         <AttachmentSection
           attachments={attachments}
           onAdd={(paths) => onAddAttachment(task.id, paths)}
+          onAddFolder={(folderPath, displayName, replaceId) => onAddFolder(task.id, folderPath, displayName, replaceId)}
           onDelete={onDeleteAttachment}
           onOpen={onOpenAttachment}
         />

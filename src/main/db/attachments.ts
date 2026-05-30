@@ -4,13 +4,15 @@ import path from 'path'
 import fs from 'fs'
 
 export interface AttachmentRow {
-  id: number
-  task_id: number
-  filename: string
-  filepath: string
-  size: number
-  mime_type: string
-  created_at: string
+  id:                   number
+  task_id:              number
+  filename:             string
+  filepath:             string
+  size:                 number
+  mime_type:            string
+  is_folder:            number        // 0 | 1
+  parent_attachment_id: number | null
+  created_at:           string
 }
 
 function getMimeType(filename: string): string {
@@ -86,13 +88,22 @@ export function deleteAttachment(id: number): void {
   if (!row) return
 
   try {
-    if (fs.existsSync(row.filepath)) {
+    if (row.is_folder) {
+      // Delete the stored directory and all its contents
+      if (fs.existsSync(row.filepath)) {
+        fs.rmSync(row.filepath, { recursive: true, force: true })
+      }
+    } else if (fs.existsSync(row.filepath)) {
       fs.unlinkSync(row.filepath)
     }
   } catch (err) {
-    console.error('[Attachments] Failed to delete file:', err)
+    console.error('[Attachments] Failed to delete file/folder:', err)
   }
 
+  // Explicitly delete children first (belt-and-suspenders for older SQLite)
+  if (row.is_folder) {
+    db.prepare('DELETE FROM attachments WHERE parent_attachment_id = ?').run(id)
+  }
   db.prepare('DELETE FROM attachments WHERE id = ?').run(id)
 }
 
@@ -130,6 +141,93 @@ export function addAttachmentMultiple(taskId: number, sourcePaths: string[]): Ad
   }
 
   return { added, skipped }
+}
+
+// ── Folder attachments ────────────────────────────────────────────────────────
+
+function collectFilesRecursive(
+  dir: string,
+  base: string
+): Array<{ rel: string; abs: string }> {
+  const result: Array<{ rel: string; abs: string }> = []
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const abs = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      result.push(...collectFilesRecursive(abs, base))
+    } else if (entry.isFile()) {
+      result.push({ rel: path.relative(base, abs), abs })
+    }
+  }
+  return result
+}
+
+export interface AddFolderResult {
+  folder:   AttachmentRow
+  children: AttachmentRow[]
+}
+
+export function addFolder(
+  taskId:      number,
+  sourcePath:  string,
+  displayName: string
+): AddFolderResult {
+  const db = getDb()
+
+  // Collect all files before touching the DB
+  const files = collectFilesRecursive(sourcePath, sourcePath)
+  const totalSize = files.reduce((sum, { abs }) => sum + fs.statSync(abs).size, 0)
+
+  // Create destination directory
+  const storageDir = path.join(app.getPath('userData'), 'attachments', String(taskId))
+  const destDir    = path.join(storageDir, `${Date.now()}_${displayName}`)
+  fs.mkdirSync(destDir, { recursive: true })
+
+  // Copy all files; clean up on failure
+  const copied: Array<{ rel: string; destPath: string; size: number; mime: string }> = []
+  try {
+    for (const { rel, abs } of files) {
+      const dest = path.join(destDir, rel)
+      fs.mkdirSync(path.dirname(dest), { recursive: true })
+      fs.copyFileSync(abs, dest)
+      copied.push({
+        rel,
+        destPath: dest,
+        size:     fs.statSync(abs).size,
+        mime:     getMimeType(path.basename(abs)),
+      })
+    }
+  } catch (err) {
+    try { fs.rmSync(destDir, { recursive: true, force: true }) } catch { /* best-effort */ }
+    throw err
+  }
+
+  // Insert DB rows in a single transaction
+  const insertAll = db.transaction((): AddFolderResult => {
+    const folderRun = db
+      .prepare(
+        `INSERT INTO attachments (task_id, filename, filepath, size, mime_type, is_folder)
+         VALUES (?, ?, ?, ?, 'inode/directory', 1)`
+      )
+      .run(taskId, displayName, destDir, totalSize)
+    const folderId = Number(folderRun.lastInsertRowid)
+
+    for (const { rel, destPath, size, mime } of copied) {
+      db.prepare(
+        `INSERT INTO attachments
+           (task_id, filename, filepath, size, mime_type, is_folder, parent_attachment_id)
+         VALUES (?, ?, ?, ?, ?, 0, ?)`
+      ).run(taskId, rel, destPath, size, mime, folderId)
+    }
+
+    const folder   = db.prepare('SELECT * FROM attachments WHERE id = ?').get(folderId) as AttachmentRow
+    const children = db
+      .prepare('SELECT * FROM attachments WHERE parent_attachment_id = ? ORDER BY filename')
+      .all(folderId) as AttachmentRow[]
+
+    return { folder, children }
+  })
+
+  return insertAll()
 }
 
 export function getAttachmentById(id: number): AttachmentRow | null {

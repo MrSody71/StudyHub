@@ -24,11 +24,12 @@ const api = {
     completeRecurring: (id: number)                => ipcRenderer.invoke('tasks:completeRecurring', id)
   },
   attachments: {
-    getByTask:   (taskId: number)                   => ipcRenderer.invoke('attachments:getByTask', taskId),
-    add:         (taskId: number, filePath: string) => ipcRenderer.invoke('attachments:add', taskId, filePath),
-    addMultiple: (taskId: number, paths: string[])  => ipcRenderer.invoke('attachments:addMultiple', taskId, paths),
-    delete:      (id: number)                       => ipcRenderer.invoke('attachments:delete', id),
-    open:        (id: number)                       => ipcRenderer.invoke('attachments:open', id),
+    getByTask:   (taskId: number)                              => ipcRenderer.invoke('attachments:getByTask', taskId),
+    add:         (taskId: number, filePath: string)            => ipcRenderer.invoke('attachments:add', taskId, filePath),
+    addMultiple: (taskId: number, paths: string[])             => ipcRenderer.invoke('attachments:addMultiple', taskId, paths),
+    addFolder:   (taskId: number, src: string, name: string)   => ipcRenderer.invoke('attachments:addFolder', taskId, src, name),
+    delete:      (id: number)                                  => ipcRenderer.invoke('attachments:delete', id),
+    open:        (id: number)                                  => ipcRenderer.invoke('attachments:open', id),
     export:      (files: Array<{ filepath: string; filename: string }>, destDir: string) =>
                    ipcRenderer.invoke('attachments:export', files, destDir)
   },

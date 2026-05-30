@@ -28,11 +28,12 @@ declare global {
         completeRecurring: (id: number)                                               => Promise<IpcResult<{ task: Task; spawned: Task | null }>>
       }
       attachments: {
-        getByTask:   (taskId: number)                   => Promise<IpcResult<Attachment[]>>
-        add:         (taskId: number, filePath: string) => Promise<IpcResult<Attachment>>
-        addMultiple: (taskId: number, paths: string[])  => Promise<IpcResult<{ added: Attachment[]; skipped: string[] }>>
-        delete:      (id: number)                       => Promise<IpcResult<null>>
-        open:        (id: number)                       => Promise<IpcResult<null>>
+        getByTask:   (taskId: number)                            => Promise<IpcResult<Attachment[]>>
+        add:         (taskId: number, filePath: string)          => Promise<IpcResult<Attachment>>
+        addMultiple: (taskId: number, paths: string[])           => Promise<IpcResult<{ added: Attachment[]; skipped: string[] }>>
+        addFolder:   (taskId: number, src: string, name: string) => Promise<IpcResult<{ folder: Attachment; children: Attachment[] }>>
+        delete:      (id: number)                                => Promise<IpcResult<null>>
+        open:        (id: number)                                => Promise<IpcResult<null>>
         export:      (files: Array<{ filepath: string; filename: string }>, destDir: string) => Promise<IpcResult<{ count: number; destDir: string }>>
       }
       subtasks: {

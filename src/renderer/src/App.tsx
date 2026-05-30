@@ -333,9 +333,28 @@ export default function App() {
   }
 
   async function handleDeleteAttachment(id: number) {
-    if (!confirm('Удалить вложение?')) return
+    const item = attachments.find((a) => a.id === id)
+    const msg  = item?.is_folder ? 'Удалить папку и все вложенные файлы?' : 'Удалить вложение?'
+    if (!confirm(msg)) return
     await unwrap(window.api.attachments.delete(id))
-    setAttachments((prev) => prev.filter((a) => a.id !== id))
+    setAttachments((prev) => prev.filter((a) => a.id !== id && a.parent_attachment_id !== id))
+  }
+
+  async function handleAddFolder(taskId: number, folderPath: string, displayName: string, replaceId?: number) {
+    try {
+      if (replaceId != null) {
+        await unwrap(window.api.attachments.delete(replaceId))
+        setAttachments((prev) => prev.filter((a) => a.id !== replaceId && a.parent_attachment_id !== replaceId))
+      }
+      const result = await unwrap(window.api.attachments.addFolder(taskId, folderPath, displayName))
+      setAttachments((prev) => [result.folder, ...result.children, ...prev])
+      void window.api.notifications.show(
+        'Папка прикреплена',
+        `${displayName} — ${result.children.length} файл(ов)`
+      )
+    } catch (e) {
+      setError(String(e))
+    }
   }
 
   async function handleOpenAttachment(id: number) {
@@ -637,6 +656,7 @@ export default function App() {
                 onSetTaskTags={handleSetTaskTags}
                 onCreateTag={handleCreateTag}
                 onAddAttachment={handleAddAttachment}
+                onAddFolder={handleAddFolder}
                 onDeleteAttachment={handleDeleteAttachment}
                 onOpenAttachment={handleOpenAttachment}
                 onCreateSubtask={handleCreateSubtask}

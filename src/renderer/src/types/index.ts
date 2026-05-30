@@ -58,13 +58,15 @@ export interface Subtask {
 }
 
 export interface Attachment {
-  id:         number
-  task_id:    number
-  filename:   string
-  filepath:   string
-  size:       number
-  mime_type:  string
-  created_at: string
+  id:                   number
+  task_id:              number
+  filename:             string
+  filepath:             string
+  size:                 number
+  mime_type:            string
+  is_folder:            number        // 0 | 1
+  parent_attachment_id: number | null
+  created_at:           string
 }
 
 export interface ScheduleEntry {
