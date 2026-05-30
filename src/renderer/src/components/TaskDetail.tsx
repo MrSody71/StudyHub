@@ -155,7 +155,7 @@ interface Props {
   onCompleteRecurring: (taskId: number) => void
   onSetTaskTags:       (taskId: number, tagIds: number[]) => Promise<void>
   onCreateTag:         (name: string, color: string) => Promise<Tag>
-  onAddAttachment:     (taskId: number) => void
+  onAddAttachment:     (taskId: number, paths?: string[]) => void
   onDeleteAttachment:  (id: number) => void
   onOpenAttachment:    (id: number) => void
   onCreateSubtask:     (taskId: number, title: string) => void
@@ -553,7 +553,7 @@ function ExportAttachmentsDialog({
 
 interface AttachmentSectionProps {
   attachments: Attachment[]
-  onAdd:    () => void
+  onAdd:    (paths?: string[]) => void
   onDelete: (id: number) => void
   onOpen:   (id: number) => void
 }
@@ -562,13 +562,41 @@ function AttachmentSection({ attachments, onAdd, onDelete, onOpen }: AttachmentS
   const [lightbox,       setLightbox]       = useState<Attachment | null>(null)
   const [pdfView,        setPdfView]        = useState<Attachment | null>(null)
   const [exportOpen,     setExportOpen]     = useState(false)
+  const [dragOver,       setDragOver]       = useState(false)
 
   // Image thumbnails row (up to 4 visible)
   const images  = attachments.filter((a) => isImage(a.mime_type))
   const others  = attachments.filter((a) => !isImage(a.mime_type))
 
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(true)
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(false)
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(false)
+    const paths = Array.from(e.dataTransfer.files)
+      .map((f) => (f as unknown as { path: string }).path)
+      .filter(Boolean)
+    if (paths.length > 0) onAdd(paths)
+  }
+
   return (
-    <div>
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      style={dragOver ? { outline: '2px dashed var(--accent)', borderRadius: 8, backgroundColor: 'var(--bg-hover)' } : undefined}
+    >
       {lightbox && (
         <ImageLightbox
           url={attachmentUrl(lightbox.id)}
@@ -600,13 +628,13 @@ function AttachmentSection({ attachments, onAdd, onDelete, onOpen }: AttachmentS
               Выгрузить файлы
             </button>
           )}
-          <button className="btn btn-secondary btn-sm" onClick={onAdd}>+ Прикрепить файл</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => onAdd()}>+ Прикрепить файлы</button>
         </div>
       </div>
 
       {attachments.length === 0 ? (
         <div style={{ color: 'var(--text-tertiary)', fontSize: 13, padding: '10px 0', textAlign: 'center' }}>
-          Нет прикреплённых файлов
+          Нет прикреплённых файлов · перетащите сюда
         </div>
       ) : (
         <>
@@ -1121,7 +1149,7 @@ export default function TaskDetail({
         {/* Attachments */}
         <AttachmentSection
           attachments={attachments}
-          onAdd={() => onAddAttachment(task.id)}
+          onAdd={(paths) => onAddAttachment(task.id, paths)}
           onDelete={onDeleteAttachment}
           onOpen={onOpenAttachment}
         />

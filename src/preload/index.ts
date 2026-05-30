@@ -24,12 +24,13 @@ const api = {
     completeRecurring: (id: number)                => ipcRenderer.invoke('tasks:completeRecurring', id)
   },
   attachments: {
-    getByTask: (taskId: number)                   => ipcRenderer.invoke('attachments:getByTask', taskId),
-    add:       (taskId: number, filePath: string) => ipcRenderer.invoke('attachments:add', taskId, filePath),
-    delete:    (id: number)                       => ipcRenderer.invoke('attachments:delete', id),
-    open:      (id: number)                       => ipcRenderer.invoke('attachments:open', id),
-    export:    (files: Array<{ filepath: string; filename: string }>, destDir: string) =>
-                 ipcRenderer.invoke('attachments:export', files, destDir)
+    getByTask:   (taskId: number)                   => ipcRenderer.invoke('attachments:getByTask', taskId),
+    add:         (taskId: number, filePath: string) => ipcRenderer.invoke('attachments:add', taskId, filePath),
+    addMultiple: (taskId: number, paths: string[])  => ipcRenderer.invoke('attachments:addMultiple', taskId, paths),
+    delete:      (id: number)                       => ipcRenderer.invoke('attachments:delete', id),
+    open:        (id: number)                       => ipcRenderer.invoke('attachments:open', id),
+    export:      (files: Array<{ filepath: string; filename: string }>, destDir: string) =>
+                   ipcRenderer.invoke('attachments:export', files, destDir)
   },
   subtasks: {
     getByTask: (taskId: number)                                    => ipcRenderer.invoke('subtasks:getByTask', taskId),
@@ -82,7 +83,7 @@ const api = {
   },
   dialog: {
     openFile:      () => ipcRenderer.invoke('dialog:openFile'),
-    openDirectory: () => ipcRenderer.invoke('dialog:openDirectory')
+    openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
   }
 }
 

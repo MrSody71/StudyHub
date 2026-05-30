@@ -96,6 +96,42 @@ export function deleteAttachment(id: number): void {
   db.prepare('DELETE FROM attachments WHERE id = ?').run(id)
 }
 
+export interface AddMultipleResult {
+  added:   AttachmentRow[]
+  skipped: string[]          // filenames of duplicates (same name + size)
+}
+
+export function addAttachmentMultiple(taskId: number, sourcePaths: string[]): AddMultipleResult {
+  const existing = getAttachmentsByTask(taskId)
+  const added:   AttachmentRow[] = []
+  const skipped: string[]        = []
+
+  for (const sourcePath of sourcePaths) {
+    const filename = path.basename(sourcePath)
+    let   size: number
+    try {
+      size = fs.statSync(sourcePath).size
+    } catch {
+      skipped.push(filename)
+      continue
+    }
+
+    const isDuplicate = existing.some(
+      (a) => a.filename === filename && a.size === size
+    )
+    if (isDuplicate) {
+      skipped.push(filename)
+      continue
+    }
+
+    const row = addAttachment(taskId, sourcePath)
+    existing.push(row)   // guard against duplicates within the same batch
+    added.push(row)
+  }
+
+  return { added, skipped }
+}
+
 export function getAttachmentById(id: number): AttachmentRow | null {
   return (getDb().prepare('SELECT * FROM attachments WHERE id = ?').get(id) as AttachmentRow) ?? null
 }

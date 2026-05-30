@@ -307,11 +307,29 @@ export default function App() {
   }
 
   // ── Attachment handlers ──────────────────────────────────────────────────
-  async function handleAddAttachment(taskId: number) {
-    const filePath = await unwrap(window.api.dialog.openFile())
-    if (!filePath) return
-    const a = await unwrap(window.api.attachments.add(taskId, filePath))
-    setAttachments((prev) => [a, ...prev])
+  async function handleAddAttachment(taskId: number, paths?: string[]) {
+    let filePaths = paths
+    if (!filePaths) {
+      filePaths = await unwrap(window.api.dialog.openFile()) ?? undefined
+    }
+    if (!filePaths || filePaths.length === 0) return
+
+    const result = await unwrap(window.api.attachments.addMultiple(taskId, filePaths))
+    if (result.added.length > 0) {
+      setAttachments((prev) => [...result.added, ...prev])
+    }
+
+    const addedCount   = result.added.length
+    const skippedCount = result.skipped.length
+    if (addedCount > 0 || skippedCount > 0) {
+      let title = addedCount > 0
+        ? `Прикреплено файлов: ${addedCount}`
+        : 'Файлы не добавлены'
+      let body = skippedCount > 0
+        ? `Пропущено (дубликаты): ${result.skipped.join(', ')}`
+        : ''
+      void window.api.notifications.show(title, body || title)
+    }
   }
 
   async function handleDeleteAttachment(id: number) {

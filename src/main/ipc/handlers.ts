@@ -5,7 +5,7 @@ import { getAllSubjects, createSubject, updateSubject, deleteSubject, archiveSub
 import { getAllSemesters, createSemester, updateSemester, deleteSemester, setActiveSemester } from '../db/semesters'
 import { getTasksBySubject, getAllTasksWithDeadline, createTask, updateTask, deleteTask, completeTaskAndSpawnNext } from '../db/tasks'
 import {
-  getAttachmentsByTask, addAttachment, deleteAttachment, openAttachment
+  getAttachmentsByTask, addAttachment, deleteAttachment, openAttachment, addAttachmentMultiple
 } from '../db/attachments'
 import {
   getSubtasksByTask, createSubtask, updateSubtask, deleteSubtask, reorderSubtasks
@@ -56,10 +56,11 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('tasks:completeRecurring',   (_e, id: number)       => wrap(() => completeTaskAndSpawnNext(id)))
 
   // ── Attachments ───────────────────────────────────────────────────────────
-  ipcMain.handle('attachments:getByTask', (_e, taskId: number) => wrap(() => getAttachmentsByTask(taskId)))
-  ipcMain.handle('attachments:add', (_e, taskId: number, filePath: string) => wrap(() => addAttachment(taskId, filePath)))
-  ipcMain.handle('attachments:delete', (_e, id: number) => wrap(() => { deleteAttachment(id); return null }))
-  ipcMain.handle('attachments:open', (_e, id: number) => wrap(() => { openAttachment(id); return null }))
+  ipcMain.handle('attachments:getByTask',   (_e, taskId: number)                    => wrap(() => getAttachmentsByTask(taskId)))
+  ipcMain.handle('attachments:add',         (_e, taskId: number, filePath: string)  => wrap(() => addAttachment(taskId, filePath)))
+  ipcMain.handle('attachments:addMultiple', (_e, taskId: number, paths: string[])   => wrap(() => addAttachmentMultiple(taskId, paths)))
+  ipcMain.handle('attachments:delete',      (_e, id: number)                        => wrap(() => { deleteAttachment(id); return null }))
+  ipcMain.handle('attachments:open',        (_e, id: number)                        => wrap(() => { openAttachment(id); return null }))
 
   // ── Subtasks ──────────────────────────────────────────────────────────────
   ipcMain.handle('subtasks:getByTask', (_e, taskId: number) => wrap(() => getSubtasksByTask(taskId)))
@@ -124,11 +125,11 @@ export function setupIpcHandlers(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return { success: false, error: 'No window' }
     const result = await dialog.showOpenDialog(win, {
-      title: 'Выберите файл',
-      properties: ['openFile']
+      title: 'Выберите файлы',
+      properties: ['openFile', 'multiSelections']
     })
     if (result.canceled || result.filePaths.length === 0) return { success: true, data: null }
-    return { success: true, data: result.filePaths[0] }
+    return { success: true, data: result.filePaths }
   })
 
   ipcMain.handle('dialog:openDirectory', async (event) => {
