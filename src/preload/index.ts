@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 
 const api = {
   subjects: {
@@ -85,6 +85,24 @@ const api = {
   dialog: {
     openFile:      () => ipcRenderer.invoke('dialog:openFile'),
     openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
+  },
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke('updater:checkForUpdates'),
+    downloadUpdate:  () => ipcRenderer.invoke('updater:downloadUpdate'),
+    quitAndInstall:  () => ipcRenderer.invoke('updater:quitAndInstall'),
+    getVersion:      () => ipcRenderer.invoke('updater:getVersion'),
+    onUpdateAvailable:    (cb: (info: { version: string }) => void) =>
+      ipcRenderer.on('updater:update-available', (_e: IpcRendererEvent, info) => cb(info)),
+    onUpdateNotAvailable: (cb: () => void) =>
+      ipcRenderer.on('updater:update-not-available', () => cb()),
+    onDownloadProgress:   (cb: (percent: number) => void) =>
+      ipcRenderer.on('updater:download-progress', (_e: IpcRendererEvent, pct) => cb(pct)),
+    onUpdateDownloaded:   (cb: (info: { version: string }) => void) =>
+      ipcRenderer.on('updater:update-downloaded', (_e: IpcRendererEvent, info) => cb(info)),
+    onError:              (cb: (msg: string) => void) =>
+      ipcRenderer.on('updater:error', (_e: IpcRendererEvent, msg) => cb(msg)),
+    removeAllListeners:   (channel: string) =>
+      ipcRenderer.removeAllListeners(channel),
   }
 }
 

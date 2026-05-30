@@ -11,15 +11,18 @@ interface Props {
   theme:              Theme
   tags:               Tag[]
   gradeScale:         number
+  appVersion:         string
+  checkStatus:        'idle' | 'checking' | 'up-to-date' | 'error'
   onThemeChange:      (t: Theme) => void
   onGradeScaleChange: (scale: number) => void
   onCreateTag:        (name: string, color: string) => Promise<Tag>
   onUpdateTag:        (id: number, data: { name?: string; color?: string }) => Promise<void>
   onDeleteTag:        (id: number) => Promise<void>
+  onCheckForUpdates:  () => void
   onClose:            () => void
 }
 
-export default function SettingsPanel({ theme, tags, gradeScale, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onClose }: Props) {
+export default function SettingsPanel({ theme, tags, gradeScale, appVersion, checkStatus, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onClose }: Props) {
   // ── New tag form ────────────────────────────────────────────────────────
   const [newName, setNewName]   = useState('')
   const [newColor, setNewColor] = useState(TAG_COLORS[5])
@@ -212,10 +215,41 @@ export default function SettingsPanel({ theme, tags, gradeScale, onThemeChange, 
           </div>
         </div>
 
-        <div style={{ padding: '0 22px 20px', borderTop: '1px solid var(--border)' }}>
-          <div style={{ paddingTop: 16, fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
-            <strong style={{ color: 'var(--text-secondary)' }}>StudyHub</strong> v1.0.0<br />
-            Данные хранятся локально на вашем компьютере.
+        {/* About / updates section */}
+        <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>
+          <div className="settings-section-title">О приложении</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              <strong style={{ color: 'var(--text-primary)' }}>StudyHub</strong>
+              {appVersion && (
+                <span style={{ marginLeft: 6, color: 'var(--text-tertiary)' }}>
+                  v{appVersion}
+                </span>
+              )}
+              <br />
+              Данные хранятся локально на вашем компьютере.
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={onCheckForUpdates}
+                disabled={checkStatus === 'checking'}
+              >
+                {checkStatus === 'checking' ? 'Проверяем…' : 'Проверить обновления'}
+              </button>
+
+              {checkStatus === 'up-to-date' && (
+                <span style={{ fontSize: 12, color: 'var(--success, #22c55e)' }}>
+                  ✓ Установлена последняя версия
+                </span>
+              )}
+              {checkStatus === 'error' && (
+                <span style={{ fontSize: 12, color: 'var(--danger)' }}>
+                  Не удалось проверить обновления
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -52,6 +52,17 @@ export default function App() {
 
   const [sessionVersion, setSessionVersion] = useState(0)
 
+  // ── Auto-updater state ───────────────────────────────────────────────────
+  type UpdateStage = 'available' | 'downloading' | 'downloaded'
+  const [updateVersion,   setUpdateVersion]   = useState<string | null>(null)
+  const [updateStage,     setUpdateStage]     = useState<UpdateStage>('available')
+  const [updateProgress,  setUpdateProgress]  = useState(0)
+  const [updateDismissed, setUpdateDismissed] = useState(false)
+  // For the Settings panel manual check
+  type CheckStatus = 'idle' | 'checking' | 'up-to-date' | 'error'
+  const [checkStatus,     setCheckStatus]     = useState<CheckStatus>('idle')
+  const [appVersion,      setAppVersion]      = useState('')
+
   // Pomodoro – instantiated at App level so it persists across view switches
   const [pomState, pomControls] = usePomodoro(() => {
     setSessionVersion((v) => v + 1)
@@ -75,6 +86,31 @@ export default function App() {
     void loadAllGrades()
     void loadGradeScale()
     void loadSubjectSort()
+
+    // Load app version and subscribe to updater events
+    void window.api.updater.getVersion().then((r) => {
+      if (r.success) setAppVersion(r.data)
+    })
+    window.api.updater.onUpdateAvailable((info) => {
+      setUpdateVersion(info.version)
+      setUpdateStage('available')
+      setUpdateDismissed(false)
+    })
+    window.api.updater.onUpdateNotAvailable(() => {
+      setCheckStatus('up-to-date')
+    })
+    window.api.updater.onDownloadProgress((pct) => {
+      setUpdateProgress(pct)
+    })
+    window.api.updater.onUpdateDownloaded((info) => {
+      setUpdateVersion(info.version)
+      setUpdateStage('downloaded')
+      setUpdateDismissed(false)
+    })
+    window.api.updater.onError((msg) => {
+      console.error('[updater]', msg)
+      setCheckStatus('error')
+    })
   }, [])
 
   // Reload view-specific data when switching views
@@ -481,8 +517,76 @@ export default function App() {
     await unwrap(window.api.settings.set('theme', t))
   }
 
+  async function handleCheckForUpdates() {
+    setCheckStatus('checking')
+    await window.api.updater.checkForUpdates()
+    // Result arrives via onUpdateAvailable / onUpdateNotAvailable / onError events
+  }
+
+  async function handleDownloadUpdate() {
+    setUpdateStage('downloading')
+    await window.api.updater.downloadUpdate()
+  }
+
   return (
     <div className="app">
+      {/* ── Update banner ──────────────────────────────────────────────────── */}
+      {updateVersion && !updateDismissed && (
+        <div className="update-banner">
+          {updateStage === 'available' && (
+            <>
+              <span className="update-banner-text">
+                Доступна версия {updateVersion}
+              </span>
+              <button
+                className="update-banner-btn primary"
+                onClick={() => void handleDownloadUpdate()}
+              >
+                Обновить
+              </button>
+              <button
+                className="update-banner-btn"
+                onClick={() => setUpdateDismissed(true)}
+              >
+                Позже
+              </button>
+            </>
+          )}
+          {updateStage === 'downloading' && (
+            <>
+              <span className="update-banner-text">
+                Скачивание обновления… {updateProgress > 0 ? `${updateProgress}%` : ''}
+              </span>
+              <div className="update-banner-progress">
+                <div
+                  className="update-banner-progress-fill"
+                  style={{ width: `${updateProgress}%` }}
+                />
+              </div>
+            </>
+          )}
+          {updateStage === 'downloaded' && (
+            <>
+              <span className="update-banner-text">
+                Версия {updateVersion} загружена — перезапустить?
+              </span>
+              <button
+                className="update-banner-btn primary"
+                onClick={() => void window.api.updater.quitAndInstall()}
+              >
+                Перезапустить
+              </button>
+              <button
+                className="update-banner-btn"
+                onClick={() => setUpdateDismissed(true)}
+              >
+                Позже
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {error && (
         <div style={{ position:'fixed', top:10, right:10, background:'var(--danger)', color:'#fff', padding:'10px 16px', borderRadius:8, zIndex:9999, fontSize:13 }}>
           {error}
@@ -713,11 +817,14 @@ export default function App() {
           theme={theme}
           tags={tags}
           gradeScale={gradeScale}
+          appVersion={appVersion}
+          checkStatus={checkStatus}
           onThemeChange={handleThemeChange}
           onGradeScaleChange={handleGradeScaleChange}
           onCreateTag={handleCreateTag}
           onUpdateTag={handleUpdateTag}
           onDeleteTag={handleDeleteTag}
+          onCheckForUpdates={handleCheckForUpdates}
           onClose={() => setShowSettings(false)}
         />
       )}

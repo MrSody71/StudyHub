@@ -2,6 +2,12 @@ appId: com.studyhub.app
 productName: StudyHub
 copyright: Copyright © 2024 StudyHub
 
+publish:
+  provider: github
+  owner: MrSody71
+  repo: StudyHub
+  releaseType: release
+
 directories:
   output: dist
   buildResources: build

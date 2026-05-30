@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Desktop study organizer",
   "main": "out/main/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MrSody71/StudyHub.git"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "start": "electron-vite dev",
@@ -11,11 +15,13 @@
     "generate:icon": "node scripts/generate-icon.js",
     "build:win": "node scripts/generate-icon.js && electron-vite build && node scripts/build.js nsis",
     "build:portable": "node scripts/generate-icon.js && electron-vite build && node scripts/build.js portable",
+    "release": "node scripts/generate-icon.js && electron-vite build && electron-builder --win nsis --x64 --publish always",
     "setup": "npm install --ignore-scripts && node node_modules/electron/install.js && npx electron-builder install-app-deps",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
-    "better-sqlite3": "^12.0.0"
+    "better-sqlite3": "^12.0.0",
+    "electron-updater": "^6.8.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.8",

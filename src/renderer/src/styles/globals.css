@@ -126,6 +126,63 @@ body {
   overflow: hidden;
 }
 
+/* ── Update banner ─────────────────────────────────────────────────────── */
+.update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 9px 16px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  flex-wrap: wrap;
+}
+
+.update-banner-text {
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.update-banner-btn {
+  background: rgba(255,255,255,.18);
+  border: 1px solid rgba(255,255,255,.4);
+  color: #fff;
+  padding: 4px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: background .15s;
+  flex-shrink: 0;
+}
+.update-banner-btn:hover { background: rgba(255,255,255,.30); }
+.update-banner-btn.primary { background: rgba(255,255,255,.32); font-weight: 600; }
+.update-banner-btn.primary:hover { background: rgba(255,255,255,.48); }
+
+.update-banner-progress {
+  width: 140px;
+  height: 4px;
+  background: rgba(255,255,255,.3);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.update-banner-progress-fill {
+  height: 100%;
+  background: #fff;
+  border-radius: 2px;
+  transition: width .3s ease;
+}
+
 /* ── Sidebar ────────────────────────────────────────────────────────────── */
 .sidebar {
   width: var(--sidebar-w);

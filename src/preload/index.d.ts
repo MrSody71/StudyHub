@@ -89,6 +89,18 @@ declare global {
         openFile:      () => Promise<IpcResult<string[] | null>>
         openDirectory: () => Promise<IpcResult<string | null>>
       }
+      updater: {
+        checkForUpdates:      () => Promise<IpcResult<null>>
+        downloadUpdate:       () => Promise<IpcResult<null>>
+        quitAndInstall:       () => Promise<IpcResult<null>>
+        getVersion:           () => Promise<IpcResult<string>>
+        onUpdateAvailable:    (cb: (info: { version: string }) => void) => void
+        onUpdateNotAvailable: (cb: () => void) => void
+        onDownloadProgress:   (cb: (percent: number) => void) => void
+        onUpdateDownloaded:   (cb: (info: { version: string }) => void) => void
+        onError:              (cb: (msg: string) => void) => void
+        removeAllListeners:   (channel: string) => void
+      }
     }
   }
 }

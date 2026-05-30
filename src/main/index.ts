@@ -4,6 +4,7 @@ import { initDatabase, closeDatabase } from './db/database'
 import { setupIpcHandlers } from './ipc/handlers'
 import { startNotificationScheduler } from './notifications'
 import { setupAttachmentProtocol } from './protocol'
+import { setupAutoUpdater } from './updater'
 
 // Must be called before app.ready
 protocol.registerSchemesAsPrivileged([{
@@ -61,6 +62,7 @@ app.whenReady().then(() => {
   setupIpcHandlers()
   setupAttachmentProtocol()
   startNotificationScheduler()
+  setupAutoUpdater()
   createWindow()
 
   app.on('activate', () => {
