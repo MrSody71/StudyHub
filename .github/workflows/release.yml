@@ -1,0 +1,51 @@
+name: Release
+
+# Запускается при пуше тега вида v1.2.3
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    # Нужно для создания Release и загрузки артефактов
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Синхронизируем версию в package.json с тегом (v1.2.3 → 1.2.3).
+      # Без этого шага артефакты были бы названы по старой версии из package.json.
+      - name: Sync version from tag
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          npm version "$VERSION" --no-git-tag-version
+
+      - name: Generate icon
+        run: node scripts/generate-icon.js
+
+      - name: Build (main + preload + renderer)
+        run: npx electron-vite build
+
+      # Собирает оба таргета (nsis + portable) и публикует их в GitHub Release.
+      # electron-builder создаёт Release автоматически, если его ещё нет.
+      # latest.yml, загружаемый вместе с .exe, нужен для electron-updater.
+      - name: Package & publish
+        run: npx electron-builder --win nsis portable --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
