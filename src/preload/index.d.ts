@@ -1,4 +1,4 @@
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, StudySession, SessionStats, Grade, SubjectGradeStat, Note, DashboardData, Semester } from '../renderer/src/types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, StudySession, SessionStats, Grade, SubjectGradeStat, Note, DashboardData, Semester } from '../renderer/src/types'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
 
@@ -51,10 +51,17 @@ declare global {
         setTaskTags: (taskId: number, tagIds: number[])                         => Promise<IpcResult<null>>
       }
       schedule: {
-        getAll:  ()                                                                   => Promise<IpcResult<ScheduleEntry[]>>
-        create:  (data: Omit<ScheduleEntry, 'id' | 'created_at'>)                   => Promise<IpcResult<ScheduleEntry>>
-        update:  (id: number, data: Partial<Omit<ScheduleEntry, 'id' | 'created_at'>>) => Promise<IpcResult<ScheduleEntry>>
-        delete:  (id: number)                                                         => Promise<IpcResult<null>>
+        getAll:      ()                                                                        => Promise<IpcResult<ScheduleEntry[]>>
+        create:      (data: Omit<ScheduleEntry, 'id' | 'created_at'>)                        => Promise<IpcResult<ScheduleEntry>>
+        update:      (id: number, data: Partial<Omit<ScheduleEntry, 'id' | 'created_at'>>)   => Promise<IpcResult<ScheduleEntry>>
+        delete:      (id: number)                                                              => Promise<IpcResult<null>>
+        batchImport: (entries: BatchImportEntry[], replace: boolean)                          => Promise<IpcResult<BatchImportResult>>
+      }
+      tulgu: {
+        fetchGroups:   (baseUrl: string, token: string, entityType: 'group' | 'teacher') =>
+          Promise<IpcResult<{ id: string; name: string }[]>>
+        fetchSchedule: (baseUrl: string, token: string, groupId: string, entityType: 'group' | 'teacher', dateFrom?: string, dateTo?: string) =>
+          Promise<IpcResult<BatchImportEntry[]>>
       }
       dashboard: {
         getData: (semesterId?: number | null) => Promise<IpcResult<DashboardData>>

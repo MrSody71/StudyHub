@@ -210,6 +210,12 @@ const migrations: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_attachments_task   ON attachments(task_id);
       `)
     }
+  },
+  {
+    version: 11,
+    up: (db) => {
+      db.exec(`ALTER TABLE schedule_entries ADD COLUMN teacher TEXT;`)
+    }
   }
 ]
 

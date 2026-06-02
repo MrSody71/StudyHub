@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort } from './types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort } from './types'
 import Dashboard from './components/Dashboard'
 import SubjectList from './components/SubjectList'
 import SemesterManager from './components/SemesterManager'
@@ -512,6 +512,15 @@ export default function App() {
     setScheduleEntries((prev) => prev.filter((e) => e.id !== id))
   }
 
+  async function handleBatchImport(entries: BatchImportEntry[], replace: boolean): Promise<BatchImportResult> {
+    const result = await unwrap(window.api.schedule.batchImport(entries, replace))
+    // Reload schedule entries and subjects (new subjects may have been created)
+    await loadScheduleEntries()
+    await loadSubjects()
+    await loadGradeStats()
+    return result
+  }
+
   async function handleThemeChange(t: Theme) {
     setTheme(t)
     await unwrap(window.api.settings.set('theme', t))
@@ -784,6 +793,7 @@ export default function App() {
             onCreate={handleCreateScheduleEntry}
             onUpdate={handleUpdateScheduleEntry}
             onDelete={handleDeleteScheduleEntry}
+            onBatchImport={handleBatchImport}
           />
         </div>
       )}

@@ -16,8 +16,10 @@ import {
 } from '../db/tags'
 import { getSetting, setSetting } from '../db/settings'
 import {
-  getAllScheduleEntries, createScheduleEntry, updateScheduleEntry, deleteScheduleEntry
+  getAllScheduleEntries, createScheduleEntry, updateScheduleEntry, deleteScheduleEntry,
+  batchImportScheduleEntries
 } from '../db/schedule'
+import { fetchTulguGroups, fetchTulguSchedule } from '../tulgu'
 import { createSession, getSessionStats } from '../db/sessions'
 import { getGradesBySubject, createGrade, updateGrade, deleteGrade, getSubjectGradeStats, getAllGrades } from '../db/grades'
 import { getNotesBySubject, createNote, updateNote, deleteNote, searchNotes } from '../db/notes'
@@ -83,6 +85,35 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('schedule:create',    (_e, data)                 => wrap(() => createScheduleEntry(data)))
   ipcMain.handle('schedule:update',    (_e, id: number, data)     => wrap(() => updateScheduleEntry(id, data)))
   ipcMain.handle('schedule:delete',    (_e, id: number)           => wrap(() => { deleteScheduleEntry(id); return null }))
+  ipcMain.handle('schedule:batchImport', (_e, entries, replace: boolean) =>
+    wrap(() => batchImportScheduleEntries(entries, replace)))
+
+  // ── ТулГУ API proxy (HTTP fetch runs in main to bypass renderer CORS) ─────
+  ipcMain.handle('tulgu:fetchGroups', async (_e, baseUrl: string, token: string, entityType: 'group' | 'teacher') => {
+    try {
+      const data = await fetchTulguGroups(baseUrl, token, entityType)
+      return { success: true, data }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('tulgu:fetchSchedule', async (
+    _e,
+    baseUrl: string,
+    token: string,
+    groupId: string,
+    entityType: 'group' | 'teacher',
+    dateFrom?: string,
+    dateTo?: string
+  ) => {
+    try {
+      const data = await fetchTulguSchedule(baseUrl, token, groupId, entityType, dateFrom, dateTo)
+      return { success: true, data }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
 
   // ── Dashboard ────────────────────────────────────────────────────────────
   ipcMain.handle('dashboard:getData', (_e, semesterId?: number | null) => wrap(() => getDashboardData(semesterId)))

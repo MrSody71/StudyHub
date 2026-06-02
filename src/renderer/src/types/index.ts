@@ -77,7 +77,23 @@ export interface ScheduleEntry {
   start_time:  string   // 'HH:MM'
   end_time:    string   // 'HH:MM'
   location:    string | null
+  teacher:     string | null
   created_at:  string
+}
+
+export interface BatchImportEntry {
+  subject_name: string | null
+  title:        string
+  day_of_week:  number   // 0 = Mon … 6 = Sun
+  start_time:   string   // 'HH:MM'
+  end_time:     string   // 'HH:MM'
+  location:     string | null
+  teacher:      string | null
+}
+
+export interface BatchImportResult {
+  created:         number
+  subjectsCreated: number
 }
 
 export interface TaskStats {

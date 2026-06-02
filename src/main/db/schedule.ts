@@ -8,6 +8,7 @@ export interface ScheduleEntryRow {
   start_time:  string   // 'HH:MM'
   end_time:    string   // 'HH:MM'
   location:    string | null
+  teacher:     string | null
   created_at:  string
 }
 
@@ -18,6 +19,7 @@ export interface CreateScheduleEntryData {
   start_time:   string
   end_time:     string
   location?:    string | null
+  teacher?:     string | null
 }
 
 export interface UpdateScheduleEntryData {
@@ -27,7 +29,29 @@ export interface UpdateScheduleEntryData {
   start_time?:  string
   end_time?:    string
   location?:    string | null
+  teacher?:     string | null
 }
+
+export interface BatchImportEntry {
+  subject_name: string | null
+  title:        string
+  day_of_week:  number   // 0 = Mon … 6 = Sun
+  start_time:   string   // 'HH:MM'
+  end_time:     string   // 'HH:MM'
+  location:     string | null
+  teacher:      string | null
+}
+
+export interface BatchImportResult {
+  created:         number
+  subjectsCreated: number
+}
+
+const DEFAULT_COLORS = [
+  '#6366f1', '#ec4899', '#f59e0b', '#10b981',
+  '#3b82f6', '#ef4444', '#8b5cf6', '#14b8a6',
+  '#f97316', '#06b6d4', '#84cc16', '#a855f7'
+]
 
 export function getAllScheduleEntries(): ScheduleEntryRow[] {
   return getDb()
@@ -39,8 +63,8 @@ export function createScheduleEntry(data: CreateScheduleEntryData): ScheduleEntr
   const db = getDb()
   const result = db
     .prepare(
-      `INSERT INTO schedule_entries (subject_id, title, day_of_week, start_time, end_time, location)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO schedule_entries (subject_id, title, day_of_week, start_time, end_time, location, teacher)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       data.subject_id ?? null,
@@ -48,7 +72,8 @@ export function createScheduleEntry(data: CreateScheduleEntryData): ScheduleEntr
       data.day_of_week,
       data.start_time,
       data.end_time,
-      data.location ?? null
+      data.location ?? null,
+      data.teacher ?? null
     )
   return db
     .prepare('SELECT * FROM schedule_entries WHERE id = ?')
@@ -66,6 +91,7 @@ export function updateScheduleEntry(id: number, data: UpdateScheduleEntryData): 
   if (data.start_time  !== undefined) { fields.push('start_time = ?');  values.push(data.start_time) }
   if (data.end_time    !== undefined) { fields.push('end_time = ?');    values.push(data.end_time) }
   if (data.location    !== undefined) { fields.push('location = ?');    values.push(data.location) }
+  if (data.teacher     !== undefined) { fields.push('teacher = ?');     values.push(data.teacher) }
 
   if (fields.length > 0) {
     values.push(id)
@@ -79,4 +105,64 @@ export function updateScheduleEntry(id: number, data: UpdateScheduleEntryData): 
 
 export function deleteScheduleEntry(id: number): void {
   getDb().prepare('DELETE FROM schedule_entries WHERE id = ?').run(id)
+}
+
+export function batchImportScheduleEntries(
+  entries: BatchImportEntry[],
+  replace: boolean
+): BatchImportResult {
+  const db = getDb()
+
+  if (replace) {
+    db.prepare('DELETE FROM schedule_entries').run()
+  }
+
+  // Load existing non-archived subjects for name matching
+  const existingSubjects = db
+    .prepare('SELECT id, name FROM subjects WHERE is_archived = 0')
+    .all() as { id: number; name: string }[]
+
+  const subjectMap = new Map(existingSubjects.map((s) => [s.name.toLowerCase().trim(), s.id]))
+  let colorIdx = existingSubjects.length % DEFAULT_COLORS.length
+  let created = 0
+  let subjectsCreated = 0
+
+  const doInsert = db.transaction(() => {
+    for (const entry of entries) {
+      let subject_id: number | null = null
+
+      if (entry.subject_name) {
+        const key = entry.subject_name.toLowerCase().trim()
+        if (subjectMap.has(key)) {
+          subject_id = subjectMap.get(key)!
+        } else {
+          const color = DEFAULT_COLORS[colorIdx % DEFAULT_COLORS.length]
+          colorIdx++
+          const r = db
+            .prepare('INSERT INTO subjects (name, color) VALUES (?, ?)')
+            .run(entry.subject_name.trim(), color)
+          subject_id = Number(r.lastInsertRowid)
+          subjectMap.set(key, subject_id)
+          subjectsCreated++
+        }
+      }
+
+      db.prepare(
+        `INSERT INTO schedule_entries (subject_id, title, day_of_week, start_time, end_time, location, teacher)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        subject_id,
+        entry.title,
+        entry.day_of_week,
+        entry.start_time,
+        entry.end_time,
+        entry.location ?? null,
+        entry.teacher ?? null
+      )
+      created++
+    }
+  })
+
+  doInsert()
+  return { created, subjectsCreated }
 }

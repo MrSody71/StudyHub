@@ -48,10 +48,17 @@ const api = {
     setTaskTags: (taskId: number, tagIds: number[])                    => ipcRenderer.invoke('tags:setTaskTags', taskId, tagIds)
   },
   schedule: {
-    getAll:  ()                            => ipcRenderer.invoke('schedule:getAll'),
-    create:  (data: unknown)               => ipcRenderer.invoke('schedule:create', data),
-    update:  (id: number, data: unknown)   => ipcRenderer.invoke('schedule:update', id, data),
-    delete:  (id: number)                  => ipcRenderer.invoke('schedule:delete', id)
+    getAll:      ()                                         => ipcRenderer.invoke('schedule:getAll'),
+    create:      (data: unknown)                            => ipcRenderer.invoke('schedule:create', data),
+    update:      (id: number, data: unknown)                => ipcRenderer.invoke('schedule:update', id, data),
+    delete:      (id: number)                               => ipcRenderer.invoke('schedule:delete', id),
+    batchImport: (entries: unknown[], replace: boolean)     => ipcRenderer.invoke('schedule:batchImport', entries, replace)
+  },
+  tulgu: {
+    fetchGroups: (baseUrl: string, token: string, entityType: string) =>
+      ipcRenderer.invoke('tulgu:fetchGroups', baseUrl, token, entityType),
+    fetchSchedule: (baseUrl: string, token: string, groupId: string, entityType: string, dateFrom?: string, dateTo?: string) =>
+      ipcRenderer.invoke('tulgu:fetchSchedule', baseUrl, token, groupId, entityType, dateFrom, dateTo)
   },
   dashboard: {
     getData: (semesterId?: number | null) => ipcRenderer.invoke('dashboard:getData', semesterId),

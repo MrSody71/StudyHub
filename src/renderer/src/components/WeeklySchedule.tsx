@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import type { ScheduleEntry, Subject } from '../types'
+import type { ScheduleEntry, Subject, BatchImportEntry, BatchImportResult } from '../types'
+import TulguImportDialog from './TulguImportDialog'
 
 interface Props {
-  entries:  ScheduleEntry[]
-  subjects: Subject[]
-  onCreate: (data: Omit<ScheduleEntry, 'id' | 'created_at'>) => void
-  onUpdate: (id: number, data: Partial<Omit<ScheduleEntry, 'id' | 'created_at'>>) => void
-  onDelete: (id: number) => void
+  entries:        ScheduleEntry[]
+  subjects:       Subject[]
+  onCreate:       (data: Omit<ScheduleEntry, 'id' | 'created_at'>) => void
+  onUpdate:       (id: number, data: Partial<Omit<ScheduleEntry, 'id' | 'created_at'>>) => void
+  onDelete:       (id: number) => void
+  onBatchImport:  (entries: BatchImportEntry[], replace: boolean) => Promise<BatchImportResult>
 }
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
@@ -102,8 +104,9 @@ function layoutDay(entries: ScheduleEntry[]): LayoutEntry[] {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, onDelete }: Props) {
+export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, onDelete, onBatchImport }: Props) {
   const [showModal, setShowModal]         = useState(false)
+  const [showImport, setShowImport]       = useState(false)
   const [editing, setEditing]             = useState<ScheduleEntry | null>(null)
   const [formTitle, setFormTitle]         = useState('')
   const [formDay, setFormDay]             = useState(0)
@@ -111,6 +114,7 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
   const [formEnd, setFormEnd]             = useState('10:30')
   const [formSubject, setFormSubject]     = useState<number | ''>('')
   const [formLocation, setFormLocation]   = useState('')
+  const [formTeacher, setFormTeacher]     = useState('')
   const [saving, setSaving]               = useState(false)
 
   function openCreate(day?: number, start?: string, end?: string) {
@@ -121,6 +125,7 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
     setFormEnd(end ?? '10:30')
     setFormSubject('')
     setFormLocation('')
+    setFormTeacher('')
     setShowModal(true)
   }
 
@@ -132,6 +137,7 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
     setFormEnd(e.end_time)
     setFormSubject(e.subject_id ?? '')
     setFormLocation(e.location ?? '')
+    setFormTeacher(e.teacher ?? '')
     setShowModal(true)
   }
 
@@ -149,6 +155,7 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
         start_time:  formStart,
         end_time:    formEnd,
         location:    formLocation.trim() || null,
+        teacher:     formTeacher.trim() || null,
       }
       if (editing) onUpdate(editing.id, data)
       else onCreate(data)
@@ -182,6 +189,13 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
         <div className="panel-header">
           <div className="panel-title">🗓 Расписание на неделю</div>
           <div className="panel-actions">
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setShowImport(true)}
+              title="Импортировать расписание из API ТулГУ"
+            >
+              ↓ Импорт из ТулГУ
+            </button>
             <button className="btn btn-primary btn-sm" onClick={() => openCreate()}>+ Занятие</button>
           </div>
         </div>
@@ -269,6 +283,9 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
                       </div>
                       {entry.location && (
                         <div className="schedule-entry-location">📍 {entry.location}</div>
+                      )}
+                      {entry.teacher && (
+                        <div className="schedule-entry-location">👤 {entry.teacher}</div>
                       )}
                       <button
                         className="schedule-entry-del"
@@ -368,6 +385,17 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
                     maxLength={80}
                   />
                 </div>
+
+                <div className="form-group">
+                  <label className="form-label">Преподаватель</label>
+                  <input
+                    className="form-input"
+                    value={formTeacher}
+                    onChange={(e) => setFormTeacher(e.target.value)}
+                    placeholder="Иванов И.И."
+                    maxLength={120}
+                  />
+                </div>
               </div>
 
               <div className="modal-footer">
@@ -389,6 +417,14 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
             </form>
           </div>
         </div>
+      )}
+
+      {/* ТулГУ import dialog */}
+      {showImport && (
+        <TulguImportDialog
+          onImport={onBatchImport}
+          onClose={() => setShowImport(false)}
+        />
       )}
     </>
   )
