@@ -59,14 +59,15 @@ export default function App() {
 
   // ── Auto-updater state ───────────────────────────────────────────────────
   type UpdateStage = 'available' | 'downloading' | 'downloaded'
-  const [updateVersion,   setUpdateVersion]   = useState<string | null>(null)
-  const [updateStage,     setUpdateStage]     = useState<UpdateStage>('available')
-  const [updateProgress,  setUpdateProgress]  = useState(0)
-  const [updateDismissed, setUpdateDismissed] = useState(false)
+  const [updateVersion,    setUpdateVersion]    = useState<string | null>(null)
+  const [updateStage,      setUpdateStage]      = useState<UpdateStage>('available')
+  const [updateProgress,   setUpdateProgress]   = useState(0)
+  const [showUpdateModal,  setShowUpdateModal]  = useState(false)
+  const [userWantsUpdate,  setUserWantsUpdate]  = useState(false)
   // For the Settings panel manual check
   type CheckStatus = 'idle' | 'checking' | 'up-to-date' | 'error'
-  const [checkStatus,     setCheckStatus]     = useState<CheckStatus>('idle')
-  const [appVersion,      setAppVersion]      = useState('')
+  const [checkStatus,      setCheckStatus]      = useState<CheckStatus>('idle')
+  const [appVersion,       setAppVersion]       = useState('')
 
   // Pomodoro – instantiated at App level so it persists across view switches
   const [pomState, pomControls] = usePomodoro(() => {
@@ -111,7 +112,7 @@ export default function App() {
     window.api.updater.onUpdateAvailable((info) => {
       setUpdateVersion(info.version)
       setUpdateStage('available')
-      setUpdateDismissed(false)
+      setShowUpdateModal(true)
     })
     window.api.updater.onUpdateNotAvailable(() => {
       setCheckStatus('up-to-date')
@@ -122,7 +123,15 @@ export default function App() {
     window.api.updater.onUpdateDownloaded((info) => {
       setUpdateVersion(info.version)
       setUpdateStage('downloaded')
-      setUpdateDismissed(false)
+      // If user clicked "Обновить", install automatically without asking again
+      setUserWantsUpdate((wants) => {
+        if (wants) {
+          setTimeout(() => window.api.updater.quitAndInstall(), 400)
+        } else {
+          setShowUpdateModal(true)
+        }
+        return wants
+      })
     })
     window.api.updater.onError((msg) => {
       console.error('[updater]', msg)
@@ -545,71 +554,87 @@ export default function App() {
 
   async function handleCheckForUpdates() {
     setCheckStatus('checking')
-    await window.api.updater.checkForUpdates()
-    // Result arrives via onUpdateAvailable / onUpdateNotAvailable / onError events
+    const r = await window.api.updater.checkForUpdates()
+    // Events handle success; catch IPC-level failure here too
+    if (!r.success) setCheckStatus('error')
   }
 
   async function handleDownloadUpdate() {
+    setUserWantsUpdate(true)
     setUpdateStage('downloading')
     await window.api.updater.downloadUpdate()
   }
 
   return (
     <div className="app">
-      {/* ── Update banner ──────────────────────────────────────────────────── */}
-      {updateVersion && !updateDismissed && (
-        <div className="update-banner">
-          {updateStage === 'available' && (
-            <>
-              <span className="update-banner-text">
-                Доступна версия {updateVersion}
-              </span>
-              <button
-                className="update-banner-btn primary"
-                onClick={() => void handleDownloadUpdate()}
-              >
-                Обновить
-              </button>
-              <button
-                className="update-banner-btn"
-                onClick={() => setUpdateDismissed(true)}
-              >
-                Позже
-              </button>
-            </>
-          )}
-          {updateStage === 'downloading' && (
-            <>
-              <span className="update-banner-text">
-                Скачивание обновления… {updateProgress > 0 ? `${updateProgress}%` : ''}
-              </span>
-              <div className="update-banner-progress">
-                <div
-                  className="update-banner-progress-fill"
-                  style={{ width: `${updateProgress}%` }}
-                />
-              </div>
-            </>
-          )}
-          {updateStage === 'downloaded' && (
-            <>
-              <span className="update-banner-text">
-                Версия {updateVersion} загружена — перезапустить?
-              </span>
-              <button
-                className="update-banner-btn primary"
-                onClick={() => void window.api.updater.quitAndInstall()}
-              >
-                Перезапустить
-              </button>
-              <button
-                className="update-banner-btn"
-                onClick={() => setUpdateDismissed(true)}
-              >
-                Позже
-              </button>
-            </>
-          )}
+      {/* ── Update modal ───────────────────────────────────────────────────── */}
+      {showUpdateModal && updateVersion && (
+        <div className="modal-overlay" onClick={() => { if (updateStage !== 'downloading') setShowUpdateModal(false) }}>
+          <div className="modal" style={{ width: 400 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Доступно обновление</span>
+              {updateStage !== 'downloading' && (
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowUpdateModal(false)}>✕</button>
+              )}
+            </div>
+            <div className="modal-body">
+              {updateStage === 'available' && (
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>
+                  Доступна новая версия <strong style={{ color: 'var(--text-primary)' }}>{updateVersion}</strong>.
+                  Обновить сейчас?
+                </p>
+              )}
+              {updateStage === 'downloading' && (
+                <div>
+                  <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 0, marginBottom: 12 }}>
+                    Скачивание версии <strong style={{ color: 'var(--text-primary)' }}>{updateVersion}</strong>…
+                  </p>
+                  <div style={{ background: 'var(--border)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', borderRadius: 4,
+                      background: 'var(--accent)',
+                      width: `${updateProgress}%`,
+                      transition: 'width .3s ease',
+                    }} />
+                  </div>
+                  {updateProgress > 0 && (
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6, textAlign: 'right' }}>
+                      {updateProgress}%
+                    </div>
+                  )}
+                </div>
+              )}
+              {updateStage === 'downloaded' && (
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>
+                  Версия <strong style={{ color: 'var(--text-primary)' }}>{updateVersion}</strong> загружена.
+                  Перезапустить приложение для установки?
+                </p>
+              )}
+            </div>
+            <div className="modal-footer">
+              {updateStage === 'available' && (
+                <>
+                  <button className="btn btn-secondary" onClick={() => setShowUpdateModal(false)}>Позже</button>
+                  <button className="btn btn-primary" onClick={() => void handleDownloadUpdate()}>
+                    Обновить →
+                  </button>
+                </>
+              )}
+              {updateStage === 'downloading' && (
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                  Пожалуйста, подождите…
+                </span>
+              )}
+              {updateStage === 'downloaded' && (
+                <>
+                  <button className="btn btn-secondary" onClick={() => setShowUpdateModal(false)}>Позже</button>
+                  <button className="btn btn-primary" onClick={() => void window.api.updater.quitAndInstall()}>
+                    Перезапустить →
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

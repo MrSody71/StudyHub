@@ -270,7 +270,7 @@ export default function SettingsPanel({ theme, tags, gradeScale, appVersion, che
               )}
               {checkStatus === 'error' && (
                 <span style={{ fontSize: 12, color: 'var(--danger)' }}>
-                  Не удалось проверить обновления
+                  Не удалось подключиться к серверу обновлений
                 </span>
               )}
             </div>

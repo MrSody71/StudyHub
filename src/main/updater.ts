@@ -86,6 +86,6 @@ export function setupAutoUpdater(): void {
       autoUpdater.checkForUpdates().catch((err) => {
         console.error('[updater] startup check failed:', err.message)
       })
-    }, 8_000)
+    }, 5_000)
   }
 }
