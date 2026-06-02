@@ -3,50 +3,25 @@ import type { ScheduleEntry, Subject, BatchImportEntry, BatchImportResult } from
 import TulguImportDialog from './TulguImportDialog'
 
 interface Props {
-  entries:        ScheduleEntry[]
-  subjects:       Subject[]
-  onCreate:       (data: Omit<ScheduleEntry, 'id' | 'created_at'>) => void
-  onUpdate:       (id: number, data: Partial<Omit<ScheduleEntry, 'id' | 'created_at'>>) => void
-  onDelete:       (id: number) => void
-  onBatchImport:  (entries: BatchImportEntry[], replace: boolean) => Promise<BatchImportResult>
+  entries:       ScheduleEntry[]
+  subjects:      Subject[]
+  onCreate:      (data: Omit<ScheduleEntry, 'id' | 'created_at'>) => void
+  onUpdate:      (id: number, data: Partial<Omit<ScheduleEntry, 'id' | 'created_at'>>) => void
+  onDelete:      (id: number) => void
+  onBatchImport: (entries: BatchImportEntry[], replace: boolean) => Promise<BatchImportResult>
 }
 
-// ── Time helpers ──────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-const HOUR_H    = 64   // px per hour
-const START_H   = 7    // grid starts at 07:00
-const END_H     = 22   // grid ends at 22:00 (exclusive)
-const HOURS     = Array.from({ length: END_H - START_H }, (_, i) => START_H + i)
-
-const DAYS_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+const DAYS_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 const DAYS_FULL  = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 
-function timeToMin(t: string): number {
-  const [h, m] = t.split(':').map(Number)
-  return h * 60 + m
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function minToTime(m: number): string {
-  const h = Math.floor(m / 60)
-  const min = m % 60
-  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
-}
-
-function entryTop(e: ScheduleEntry): number {
-  return Math.max(0, (timeToMin(e.start_time) - START_H * 60) / 60 * HOUR_H)
-}
-
-function entryHeight(e: ScheduleEntry): number {
-  const dur = timeToMin(e.end_time) - timeToMin(e.start_time)
-  return Math.max(28, dur / 60 * HOUR_H)
-}
-
-// Compute today's day-of-week index (0 = Mon … 6 = Sun)
 function todayDow(): number {
   return (new Date().getDay() + 6) % 7
 }
 
-// Current week's date for a given dow index
 function weekDate(dow: number): Date {
   const today = new Date()
   const currentDow = (today.getDay() + 6) % 7
@@ -55,67 +30,43 @@ function weekDate(dow: number): Date {
   return d
 }
 
-// ── Entry color ───────────────────────────────────────────────────────────────
-
-function entryColor(entry: ScheduleEntry, subjects: Subject[]): string {
-  if (entry.subject_id) {
-    const s = subjects.find((s) => s.id === entry.subject_id)
-    if (s) return s.color
-  }
-  return '#6366f1'
-}
-
-// ── Overlap layout ────────────────────────────────────────────────────────────
-
-interface LayoutEntry {
-  entry:     ScheduleEntry
-  col:       number
-  totalCols: number
-}
-
-function layoutDay(entries: ScheduleEntry[]): LayoutEntry[] {
-  const sorted = [...entries].sort((a, b) => a.start_time.localeCompare(b.start_time))
-  const cols: number[] = []   // tracks end minute of the last entry in each column
-
-  const result: LayoutEntry[] = sorted.map((entry) => {
-    const startMin = timeToMin(entry.start_time)
-    let col = cols.findIndex((endMin) => endMin <= startMin)
-    if (col === -1) { col = cols.length; cols.push(0) }
-    cols[col] = timeToMin(entry.end_time)
-    return { entry, col, totalCols: 0 }
-  })
-
-  // Second pass: compute totalCols per overlap group
-  for (let i = 0; i < result.length; i++) {
-    const a = result[i]
-    let maxCol = a.col
-    for (let j = 0; j < result.length; j++) {
-      if (i === j) continue
-      const b = result[j]
-      const overlapStart = Math.max(timeToMin(a.entry.start_time), timeToMin(b.entry.start_time))
-      const overlapEnd   = Math.min(timeToMin(a.entry.end_time),   timeToMin(b.entry.end_time))
-      if (overlapEnd > overlapStart) maxCol = Math.max(maxCol, b.col)
+/** Extract sorted unique time slots from entries */
+function getTimeSlots(entries: ScheduleEntry[]): Array<{ start: string; end: string }> {
+  const seen = new Set<string>()
+  const slots: Array<{ start: string; end: string }> = []
+  for (const e of entries) {
+    const key = `${e.start_time}|${e.end_time}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      slots.push({ start: e.start_time, end: e.end_time })
     }
-    a.totalCols = maxCol + 1
   }
+  return slots.sort((a, b) => a.start.localeCompare(b.start))
+}
 
-  return result
+/** Cell accent color derived from lesson type keyword in the title */
+function lessonTypeStyle(title: string): { bg: string; accent: string } {
+  const t = title.toLowerCase()
+  if (/лекц/.test(t))  return { bg: 'rgba(59,130,246,.10)',  accent: '#3b82f6' }
+  if (/лаб/.test(t))   return { bg: 'rgba(249,115,22,.10)',  accent: '#f97316' }
+  if (/практ/.test(t)) return { bg: 'rgba(34,197,94,.10)',   accent: '#22c55e' }
+  return                       { bg: 'rgba(107,114,128,.08)', accent: '#9ca3af' }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, onDelete, onBatchImport }: Props) {
-  const [showModal, setShowModal]         = useState(false)
-  const [showImport, setShowImport]       = useState(false)
-  const [editing, setEditing]             = useState<ScheduleEntry | null>(null)
-  const [formTitle, setFormTitle]         = useState('')
-  const [formDay, setFormDay]             = useState(0)
-  const [formStart, setFormStart]         = useState('09:00')
-  const [formEnd, setFormEnd]             = useState('10:30')
-  const [formSubject, setFormSubject]     = useState<number | ''>('')
-  const [formLocation, setFormLocation]   = useState('')
-  const [formTeacher, setFormTeacher]     = useState('')
-  const [saving, setSaving]               = useState(false)
+  const [showModal, setShowModal]       = useState(false)
+  const [showImport, setShowImport]     = useState(false)
+  const [editing, setEditing]           = useState<ScheduleEntry | null>(null)
+  const [formTitle, setFormTitle]       = useState('')
+  const [formDay, setFormDay]           = useState(0)
+  const [formStart, setFormStart]       = useState('09:00')
+  const [formEnd, setFormEnd]           = useState('10:30')
+  const [formSubject, setFormSubject]   = useState<number | ''>('')
+  const [formLocation, setFormLocation] = useState('')
+  const [formTeacher, setFormTeacher]   = useState('')
+  const [saving, setSaving]             = useState(false)
 
   function openCreate(day?: number, start?: string, end?: string) {
     setEditing(null)
@@ -158,7 +109,7 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
         teacher:     formTeacher.trim() || null,
       }
       if (editing) onUpdate(editing.id, data)
-      else onCreate(data)
+      else         onCreate(data)
       closeModal()
     } finally {
       setSaving(false)
@@ -170,22 +121,13 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
     onDelete(e.id)
   }
 
-  function handleDayColumnClick(e: React.MouseEvent<HTMLDivElement>, dow: number) {
-    if ((e.target as HTMLElement).closest('.schedule-entry')) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const y    = e.clientY - rect.top
-    const rawMin  = Math.round((y / HOUR_H) * 60 / 15) * 15
-    const startMin = START_H * 60 + rawMin
-    const endMin   = startMin + 90
-    openCreate(dow, minToTime(startMin), minToTime(Math.min(endMin, END_H * 60)))
-  }
-
   const todayIndex = todayDow()
+  const slots = getTimeSlots(entries)
 
   return (
     <>
       <div className="schedule-outer">
-        {/* Header row */}
+        {/* Header */}
         <div className="panel-header">
           <div className="panel-title">🗓 Расписание на неделю</div>
           <div className="panel-actions">
@@ -200,104 +142,98 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
           </div>
         </div>
 
-        {/* Day name headers */}
-        <div className="schedule-col-headers">
-          <div className="schedule-time-gutter" />
-          {DAYS_SHORT.map((d, i) => {
-            const date = weekDate(i)
-            const isToday = i === todayIndex
-            return (
-              <div key={i} className={`schedule-col-hdr${isToday ? ' today' : ''}`}>
-                <span className="schedule-col-hdr-day">{d}</span>
-                <span className="schedule-col-hdr-date">
-                  {date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
-                </span>
-                {isToday && <span className="schedule-today-badge">Сегодня</span>}
+        {/* Table */}
+        <div className="sched-table-wrap">
+          {entries.length === 0 ? (
+            <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
+              <div style={{ fontSize: 14 }}>Расписание пусто</div>
+              <div style={{ fontSize: 12, marginTop: 6, color: 'var(--text-tertiary)' }}>
+                Добавьте занятие вручную или импортируйте из ТулГУ
               </div>
-            )
-          })}
-        </div>
+            </div>
+          ) : (
+            <table className="sched-table">
+              <thead>
+                <tr>
+                  <th className="sched-th sched-time-th">Время</th>
+                  {DAYS_SHORT.map((d, i) => {
+                    const date = weekDate(i)
+                    const isToday = i === todayIndex
+                    return (
+                      <th key={i} className={`sched-th sched-day-th${isToday ? ' sched-today' : ''}`}>
+                        <span className="sched-day-name">{d}</span>
+                        <span className="sched-day-date">
+                          {date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                        </span>
+                        {isToday && <span className="sched-today-pill">Сегодня</span>}
+                      </th>
+                    )
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {slots.map((slot) => (
+                  <tr key={`${slot.start}|${slot.end}`}>
+                    {/* Time slot label */}
+                    <td className="sched-td sched-time-td">
+                      <span className="sched-slot-start">{slot.start}</span>
+                      <span className="sched-slot-sep">–</span>
+                      <span className="sched-slot-end">{slot.end}</span>
+                    </td>
 
-        {/* Scrollable body */}
-        <div className="schedule-body">
-          {/* Time axis */}
-          <div className="schedule-time-axis">
-            {HOURS.map((h) => (
-              <div key={h} className="schedule-hour-label">
-                {String(h).padStart(2, '0')}:00
-              </div>
-            ))}
-          </div>
+                    {/* Day cells */}
+                    {DAYS_SHORT.map((_, dow) => {
+                      const cellEntries = entries.filter(
+                        (e) => e.day_of_week === dow && e.start_time === slot.start && e.end_time === slot.end
+                      )
+                      const isToday = dow === todayIndex
 
-          {/* Day columns */}
-          {DAYS_SHORT.map((_, dow) => {
-            const dayEntries = entries.filter((e) => e.day_of_week === dow)
-            const laid = layoutDay(dayEntries)
-            const isToday = dow === todayIndex
-
-            return (
-              <div
-                key={dow}
-                className={`schedule-day-col${isToday ? ' today' : ''}`}
-                style={{ minHeight: (END_H - START_H) * HOUR_H }}
-                onClick={(e) => handleDayColumnClick(e, dow)}
-              >
-                {/* Hour grid lines */}
-                {HOURS.map((h) => (
-                  <div key={h} className="schedule-grid-line" />
+                      return (
+                        <td
+                          key={dow}
+                          className={`sched-td sched-cell${isToday ? ' sched-today' : ''}`}
+                          onClick={() => {
+                            if (cellEntries.length === 0) openCreate(dow, slot.start, slot.end)
+                          }}
+                          title={cellEntries.length === 0 ? 'Добавить занятие' : undefined}
+                        >
+                          {cellEntries.map((entry, idx) => {
+                            const { bg, accent } = lessonTypeStyle(entry.title)
+                            return (
+                              <div key={entry.id}>
+                                {idx > 0 && <div className="sched-lesson-divider" />}
+                                <div
+                                  className="sched-lesson"
+                                  style={{ background: bg, borderLeftColor: accent }}
+                                  onClick={(e) => { e.stopPropagation(); openEdit(entry) }}
+                                >
+                                  <div className="sched-lesson-title">{entry.title}</div>
+                                  {entry.location && (
+                                    <div className="sched-lesson-meta">📍 {entry.location}</div>
+                                  )}
+                                  {entry.teacher && (
+                                    <div className="sched-lesson-meta">👤 {entry.teacher}</div>
+                                  )}
+                                  <button
+                                    className="sched-lesson-del"
+                                    onClick={(e) => { e.stopPropagation(); handleDelete(entry) }}
+                                    title="Удалить"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </td>
+                      )
+                    })}
+                  </tr>
                 ))}
-
-                {/* Half-hour dividers */}
-                {HOURS.map((h) => (
-                  <div
-                    key={`h${h}`}
-                    className="schedule-half-line"
-                    style={{ top: (h - START_H) * HOUR_H + HOUR_H / 2 }}
-                  />
-                ))}
-
-                {/* Entries */}
-                {laid.map(({ entry, col, totalCols }) => {
-                  const color = entryColor(entry, subjects)
-                  const width = totalCols > 1 ? `calc(${100 / totalCols}% - 4px)` : 'calc(100% - 4px)'
-                  const left  = totalCols > 1 ? `calc(${(col / totalCols) * 100}% + 2px)` : '2px'
-
-                  return (
-                    <div
-                      key={entry.id}
-                      className="schedule-entry"
-                      style={{
-                        top:    entryTop(entry),
-                        height: entryHeight(entry),
-                        left,
-                        width,
-                        background:  color + '22',
-                        borderColor: color,
-                        color,
-                      }}
-                      onClick={(e) => { e.stopPropagation(); openEdit(entry) }}
-                    >
-                      <div className="schedule-entry-title">{entry.title}</div>
-                      <div className="schedule-entry-time">
-                        {entry.start_time}–{entry.end_time}
-                      </div>
-                      {entry.location && (
-                        <div className="schedule-entry-location">📍 {entry.location}</div>
-                      )}
-                      {entry.teacher && (
-                        <div className="schedule-entry-location">👤 {entry.teacher}</div>
-                      )}
-                      <button
-                        className="schedule-entry-del"
-                        onClick={(e) => { e.stopPropagation(); handleDelete(entry) }}
-                        title="Удалить"
-                      >✕</button>
-                    </div>
-                  )
-                })}
-              </div>
-            )
-          })}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -319,7 +255,7 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
                     autoFocus
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
-                    placeholder="Математика, Лекция, Практика…"
+                    placeholder="Математика (Лекция), Физика (Лаб)…"
                     maxLength={120}
                     required
                   />
