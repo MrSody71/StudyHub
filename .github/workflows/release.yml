@@ -33,7 +33,7 @@ jobs:
         shell: bash
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          npm version "$VERSION" --allow-same-version --no-git-tag-version
+          npm pkg set version="$VERSION"
 
       - name: Generate icon
         run: node scripts/generate-icon.js
