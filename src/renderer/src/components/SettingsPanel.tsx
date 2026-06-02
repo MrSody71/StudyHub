@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Tag, Theme } from '../types'
+import type { Tag, Theme, TulguStatus } from '../types'
 
 const TAG_COLORS = [
   '#ef4444','#f97316','#eab308','#22c55e',
@@ -13,16 +13,18 @@ interface Props {
   gradeScale:         number
   appVersion:         string
   checkStatus:        'idle' | 'checking' | 'up-to-date' | 'error'
+  tulguStatus:        TulguStatus
   onThemeChange:      (t: Theme) => void
   onGradeScaleChange: (scale: number) => void
   onCreateTag:        (name: string, color: string) => Promise<Tag>
   onUpdateTag:        (id: number, data: { name?: string; color?: string }) => Promise<void>
   onDeleteTag:        (id: number) => Promise<void>
   onCheckForUpdates:  () => void
+  onOpenTulguPanel:   () => void
   onClose:            () => void
 }
 
-export default function SettingsPanel({ theme, tags, gradeScale, appVersion, checkStatus, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onClose }: Props) {
+export default function SettingsPanel({ theme, tags, gradeScale, appVersion, checkStatus, tulguStatus, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onOpenTulguPanel, onClose }: Props) {
   // ── New tag form ────────────────────────────────────────────────────────
   const [newName, setNewName]   = useState('')
   const [newColor, setNewColor] = useState(TAG_COLORS[5])
@@ -213,6 +215,28 @@ export default function SettingsPanel({ theme, tags, gradeScale, appVersion, che
               {creating ? 'Создаём…' : '+ Создать тег'}
             </button>
           </div>
+        </div>
+
+        {/* TulGU schedule section */}
+        <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>
+          <div className="settings-section-title">Расписание ТулГУ</div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 10, lineHeight: 1.6 }}>
+            {tulguStatus.lastError ? (
+              <span style={{ color: 'var(--danger)' }}>⚠ Ошибка: {tulguStatus.lastError.slice(0, 80)}</span>
+            ) : tulguStatus.lastUpdated ? (
+              <>
+                <span style={{ color: 'var(--success)' }}>✓</span> Обновлено:{' '}
+                {new Date(tulguStatus.lastUpdated).toLocaleString('ru-RU', {
+                  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                })}
+              </>
+            ) : (
+              <span style={{ color: 'var(--text-tertiary)' }}>Импорт расписания не настроен</span>
+            )}
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={onOpenTulguPanel}>
+            🏫 Настроить расписание ТулГУ
+          </button>
         </div>
 
         {/* About / updates section */}

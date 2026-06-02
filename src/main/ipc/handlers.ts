@@ -20,6 +20,7 @@ import {
   batchImportScheduleEntries
 } from '../db/schedule'
 import { fetchTulguGroups, fetchTulguSchedule } from '../tulgu'
+import { syncNow, getTulguStatus, restartTulguScheduler } from '../tulguScheduler'
 import { createSession, getSessionStats } from '../db/sessions'
 import { getGradesBySubject, createGrade, updateGrade, deleteGrade, getSubjectGradeStats, getAllGrades } from '../db/grades'
 import { getNotesBySubject, createNote, updateNote, deleteNote, searchNotes } from '../db/notes'
@@ -87,6 +88,41 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('schedule:delete',    (_e, id: number)           => wrap(() => { deleteScheduleEntry(id); return null }))
   ipcMain.handle('schedule:batchImport', (_e, entries, replace: boolean) =>
     wrap(() => batchImportScheduleEntries(entries, replace)))
+
+  // ── ТулГУ config & sync ───────────────────────────────────────────────────
+  ipcMain.handle('tulgu:getConfig', () => wrap(() => ({
+    baseUrl:    getSetting('tulgu.baseUrl')    ?? '',
+    token:      getSetting('tulgu.token')      ?? '',
+    groupId:    getSetting('tulgu.groupId')    ?? '',
+    groupName:  getSetting('tulgu.groupName')  ?? '',
+    entityType: getSetting('tulgu.entityType') ?? 'group',
+    interval:   getSetting('tulgu.interval')   ?? 'manual',
+  })))
+
+  ipcMain.handle('tulgu:saveConfig', (_e, data: {
+    baseUrl: string; token: string; groupId: string; groupName: string;
+    entityType: string; interval: string;
+  }) => wrap(() => {
+    setSetting('tulgu.baseUrl',    data.baseUrl)
+    setSetting('tulgu.token',      data.token)
+    setSetting('tulgu.groupId',    data.groupId)
+    setSetting('tulgu.groupName',  data.groupName)
+    setSetting('tulgu.entityType', data.entityType)
+    setSetting('tulgu.interval',   data.interval)
+    restartTulguScheduler()
+    return null
+  }))
+
+  ipcMain.handle('tulgu:getStatus', () => wrap(() => getTulguStatus()))
+
+  ipcMain.handle('tulgu:syncNow', async () => {
+    try {
+      const result = await syncNow(true)
+      return { success: true, data: result }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
 
   // ── ТулГУ API proxy (HTTP fetch runs in main to bypass renderer CORS) ─────
   ipcMain.handle('tulgu:fetchGroups', async (_e, baseUrl: string, token: string, entityType: 'group' | 'teacher') => {

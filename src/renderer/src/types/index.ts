@@ -96,6 +96,33 @@ export interface BatchImportResult {
   subjectsCreated: number
 }
 
+export interface TulguConfig {
+  baseUrl:    string
+  token:      string
+  groupId:    string
+  groupName:  string
+  entityType: 'group' | 'teacher'
+  interval:   string   // '3h' | '6h' | '12h' | '24h' | 'manual'
+}
+
+export interface TulguStatus {
+  isSyncing:   boolean
+  lastUpdated: string | null
+  lastError:   string | null
+  lastErrorAt: string | null
+}
+
+export interface ScheduleDiff {
+  added:   string[]
+  removed: string[]
+  moved:   string[]
+}
+
+export interface TulguSyncResult {
+  changed: boolean
+  diff:    ScheduleDiff
+}
+
 export interface TaskStats {
   total:      number
   done:       number

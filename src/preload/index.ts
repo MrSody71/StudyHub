@@ -55,10 +55,20 @@ const api = {
     batchImport: (entries: unknown[], replace: boolean)     => ipcRenderer.invoke('schedule:batchImport', entries, replace)
   },
   tulgu: {
-    fetchGroups: (baseUrl: string, token: string, entityType: string) =>
+    fetchGroups:   (baseUrl: string, token: string, entityType: string) =>
       ipcRenderer.invoke('tulgu:fetchGroups', baseUrl, token, entityType),
     fetchSchedule: (baseUrl: string, token: string, groupId: string, entityType: string, dateFrom?: string, dateTo?: string) =>
-      ipcRenderer.invoke('tulgu:fetchSchedule', baseUrl, token, groupId, entityType, dateFrom, dateTo)
+      ipcRenderer.invoke('tulgu:fetchSchedule', baseUrl, token, groupId, entityType, dateFrom, dateTo),
+    getConfig:  () => ipcRenderer.invoke('tulgu:getConfig'),
+    saveConfig: (data: unknown) => ipcRenderer.invoke('tulgu:saveConfig', data),
+    getStatus:  () => ipcRenderer.invoke('tulgu:getStatus'),
+    syncNow:    () => ipcRenderer.invoke('tulgu:syncNow'),
+    onStatusChanged:   (cb: (s: unknown) => void) =>
+      ipcRenderer.on('tulgu:status-changed',   (_e, s) => cb(s)),
+    onScheduleUpdated: (cb: (d: unknown) => void) =>
+      ipcRenderer.on('tulgu:schedule-updated', (_e, d) => cb(d)),
+    removeAllListeners: (channel: string) =>
+      ipcRenderer.removeAllListeners(channel),
   },
   dashboard: {
     getData: (semesterId?: number | null) => ipcRenderer.invoke('dashboard:getData', semesterId),

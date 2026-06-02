@@ -1,4 +1,4 @@
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, StudySession, SessionStats, Grade, SubjectGradeStat, Note, DashboardData, Semester } from '../renderer/src/types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguConfig, TulguStatus, TulguSyncResult, StudySession, SessionStats, Grade, SubjectGradeStat, Note, DashboardData, Semester } from '../renderer/src/types'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
 
@@ -62,6 +62,13 @@ declare global {
           Promise<IpcResult<{ id: string; name: string }[]>>
         fetchSchedule: (baseUrl: string, token: string, groupId: string, entityType: 'group' | 'teacher', dateFrom?: string, dateTo?: string) =>
           Promise<IpcResult<BatchImportEntry[]>>
+        getConfig:  () => Promise<IpcResult<TulguConfig>>
+        saveConfig: (data: TulguConfig) => Promise<IpcResult<null>>
+        getStatus:  () => Promise<IpcResult<TulguStatus>>
+        syncNow:    () => Promise<IpcResult<TulguSyncResult>>
+        onStatusChanged:    (cb: (s: TulguStatus) => void) => void
+        onScheduleUpdated:  (cb: (diff: unknown) => void) => void
+        removeAllListeners: (channel: string) => void
       }
       dashboard: {
         getData: (semesterId?: number | null) => Promise<IpcResult<DashboardData>>

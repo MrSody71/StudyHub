@@ -5,6 +5,7 @@ import { setupIpcHandlers } from './ipc/handlers'
 import { startNotificationScheduler } from './notifications'
 import { setupAttachmentProtocol } from './protocol'
 import { setupAutoUpdater } from './updater'
+import { startTulguScheduler } from './tulguScheduler'
 
 // Must be called before app.ready
 protocol.registerSchemesAsPrivileged([{
@@ -62,6 +63,7 @@ app.whenReady().then(() => {
   setupIpcHandlers()
   setupAttachmentProtocol()
   startNotificationScheduler()
+  startTulguScheduler()
   setupAutoUpdater()
   createWindow()
 

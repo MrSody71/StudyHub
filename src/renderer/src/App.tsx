@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort } from './types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguStatus, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort } from './types'
 import Dashboard from './components/Dashboard'
 import SubjectList from './components/SubjectList'
 import SemesterManager from './components/SemesterManager'
@@ -8,6 +8,7 @@ import TaskDetail from './components/TaskDetail'
 import GradeList from './components/GradeList'
 import NoteList from './components/NoteList'
 import WeeklySchedule from './components/WeeklySchedule'
+import TulguPanel from './components/TulguPanel'
 import MonthCalendar from './components/MonthCalendar'
 import PomodoroTimer from './components/PomodoroTimer'
 import StudyStats from './components/StudyStats'
@@ -47,6 +48,10 @@ export default function App() {
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
   const [selectedTaskId, setSelectedTaskId]       = useState<number | null>(null)
   const [showSettings, setShowSettings]     = useState(false)
+  const [showTulguPanel, setShowTulguPanel] = useState(false)
+  const [tulguStatus, setTulguStatus]       = useState<TulguStatus>({
+    isSyncing: false, lastUpdated: null, lastError: null, lastErrorAt: null
+  })
   const [subjectSort, setSubjectSort]       = useState<SubjectSort>('alpha')
   const [error, setError]                   = useState<string | null>(null)
 
@@ -86,6 +91,18 @@ export default function App() {
     void loadAllGrades()
     void loadGradeScale()
     void loadSubjectSort()
+
+    // Load initial TulGU status
+    void window.api.tulgu.getStatus().then((r) => {
+      if (r.success) setTulguStatus(r.data)
+    })
+
+    // Subscribe to background sync events
+    window.api.tulgu.onStatusChanged((s) => setTulguStatus(s))
+    window.api.tulgu.onScheduleUpdated(() => {
+      void loadScheduleEntries()
+      void loadSubjects()
+    })
 
     // Load app version and subscribe to updater events
     void window.api.updater.getVersion().then((r) => {
@@ -629,6 +646,30 @@ export default function App() {
               <span className="pom-running-badge" />
             )}
           </button>
+
+          {/* Separator */}
+          <div style={{ height: 1, background: 'rgba(255,255,255,.07)', margin: '4px 0' }} />
+
+          <button
+            className={`view-nav-btn${showTulguPanel ? ' active' : ''}`}
+            onClick={() => setShowTulguPanel(true)}
+            title={
+              tulguStatus.lastError
+                ? `Ошибка синхронизации${tulguStatus.lastUpdated ? ` · Обновлено: ${new Date(tulguStatus.lastUpdated).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}`
+                : tulguStatus.lastUpdated
+                ? `Обновлено: ${new Date(tulguStatus.lastUpdated).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+                : 'Импорт расписания ТулГУ'
+            }
+          >
+            <span className="view-nav-icon">🏫</span>
+            <span>ТулГУ</span>
+            {tulguStatus.isSyncing && (
+              <span className="tulgu-sync-badge">⟳</span>
+            )}
+            {!tulguStatus.isSyncing && tulguStatus.lastError && (
+              <span className="tulgu-warn-badge">⚠</span>
+            )}
+          </button>
         </div>
 
         <SubjectList
@@ -829,13 +870,26 @@ export default function App() {
           gradeScale={gradeScale}
           appVersion={appVersion}
           checkStatus={checkStatus}
+          tulguStatus={tulguStatus}
           onThemeChange={handleThemeChange}
           onGradeScaleChange={handleGradeScaleChange}
           onCreateTag={handleCreateTag}
           onUpdateTag={handleUpdateTag}
           onDeleteTag={handleDeleteTag}
           onCheckForUpdates={handleCheckForUpdates}
+          onOpenTulguPanel={() => { setShowSettings(false); setShowTulguPanel(true) }}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {showTulguPanel && (
+        <TulguPanel
+          status={tulguStatus}
+          onClose={() => setShowTulguPanel(false)}
+          onScheduleRefresh={() => {
+            void loadScheduleEntries()
+            void loadSubjects()
+          }}
         />
       )}
 
