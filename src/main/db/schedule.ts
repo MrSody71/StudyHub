@@ -47,12 +47,6 @@ export interface BatchImportResult {
   subjectsCreated: number
 }
 
-const DEFAULT_COLORS = [
-  '#6366f1', '#ec4899', '#f59e0b', '#10b981',
-  '#3b82f6', '#ef4444', '#8b5cf6', '#14b8a6',
-  '#f97316', '#06b6d4', '#84cc16', '#a855f7'
-]
-
 export function getAllScheduleEntries(): ScheduleEntryRow[] {
   return getDb()
     .prepare('SELECT * FROM schedule_entries ORDER BY day_of_week, start_time')
@@ -117,15 +111,13 @@ export function batchImportScheduleEntries(
     db.prepare('DELETE FROM schedule_entries').run()
   }
 
-  // Load existing non-archived subjects for name matching
+  // Match entries to existing subjects by name — never auto-create subjects
   const existingSubjects = db
     .prepare('SELECT id, name FROM subjects WHERE is_archived = 0')
     .all() as { id: number; name: string }[]
 
   const subjectMap = new Map(existingSubjects.map((s) => [s.name.toLowerCase().trim(), s.id]))
-  let colorIdx = existingSubjects.length % DEFAULT_COLORS.length
   let created = 0
-  let subjectsCreated = 0
 
   const doInsert = db.transaction(() => {
     for (const entry of entries) {
@@ -133,18 +125,8 @@ export function batchImportScheduleEntries(
 
       if (entry.subject_name) {
         const key = entry.subject_name.toLowerCase().trim()
-        if (subjectMap.has(key)) {
-          subject_id = subjectMap.get(key)!
-        } else {
-          const color = DEFAULT_COLORS[colorIdx % DEFAULT_COLORS.length]
-          colorIdx++
-          const r = db
-            .prepare('INSERT INTO subjects (name, color) VALUES (?, ?)')
-            .run(entry.subject_name.trim(), color)
-          subject_id = Number(r.lastInsertRowid)
-          subjectMap.set(key, subject_id)
-          subjectsCreated++
-        }
+        if (subjectMap.has(key)) subject_id = subjectMap.get(key)!
+        // Not found → leave subject_id = null (no auto-creation)
       }
 
       db.prepare(
@@ -164,5 +146,5 @@ export function batchImportScheduleEntries(
   })
 
   doInsert()
-  return { created, subjectsCreated }
+  return { created, subjectsCreated: 0 }
 }
