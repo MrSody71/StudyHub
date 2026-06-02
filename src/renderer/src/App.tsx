@@ -13,7 +13,9 @@ import MonthCalendar from './components/MonthCalendar'
 import PomodoroTimer from './components/PomodoroTimer'
 import StudyStats from './components/StudyStats'
 import SettingsPanel from './components/SettingsPanel'
+import AuthScreen from './components/AuthScreen'
 import { usePomodoro } from './hooks/usePomodoro'
+import { initSupabase, getSupabase, clearSupabase } from './lib/supabase'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
 type AppView    = 'dashboard' | 'tasks' | 'schedule' | 'calendar' | 'timer'
@@ -57,6 +59,14 @@ export default function App() {
 
   const [sessionVersion, setSessionVersion] = useState(0)
 
+  // ── Supabase auth state ──────────────────────────────────────────────────
+  type AuthStatus = 'init' | 'local' | 'unauthenticated' | 'authenticated'
+  const [authStatus,       setAuthStatus]       = useState<AuthStatus>('init')
+  const [supaUser,         setSupaUser]         = useState<{ email: string; id: string } | null>(null)
+  const [showAuthScreen,   setShowAuthScreen]   = useState(false)
+  const [showUploadDialog, setShowUploadDialog] = useState(false)
+  const [supaConfigured,   setSupaConfigured]   = useState(false)
+
   // ── Auto-updater state ───────────────────────────────────────────────────
   type UpdateStage = 'available' | 'downloading' | 'downloaded'
   const [updateVersion,    setUpdateVersion]    = useState<string | null>(null)
@@ -92,6 +102,7 @@ export default function App() {
     void loadAllGrades()
     void loadGradeScale()
     void loadSubjectSort()
+    void initAuth()
 
     // Load initial TulGU status
     void window.api.tulgu.getStatus().then((r) => {
@@ -552,6 +563,99 @@ export default function App() {
     await unwrap(window.api.settings.set('theme', t))
   }
 
+  // ── Supabase auth ────────────────────────────────────────────────────────
+
+  async function initAuth() {
+    const urlR = await window.api.settings.get('supabase_url')
+    const keyR = await window.api.settings.get('supabase_anon_key')
+    const url  = urlR.success ? urlR.data : null
+    const key  = keyR.success ? keyR.data : null
+
+    if (!url || !key) {
+      setAuthStatus('local')
+      return
+    }
+
+    setSupaConfigured(true)
+    try {
+      const sb = initSupabase(url, key)
+      const { data: { session } } = await sb.auth.getSession()
+      if (session?.user) {
+        setSupaUser({ email: session.user.email!, id: session.user.id })
+        setAuthStatus('authenticated')
+        return
+      }
+    } catch {
+      // invalid URL/key → fall through to local
+      setAuthStatus('local')
+      return
+    }
+
+    const skipR = await window.api.settings.get('auth_skip')
+    if (skipR.success && skipR.data === '1') {
+      setAuthStatus('local')
+      return
+    }
+
+    setAuthStatus('unauthenticated')
+    setShowAuthScreen(true)
+  }
+
+  async function handleSignIn(email: string, password: string) {
+    const sb = getSupabase()
+    if (!sb) throw new Error('Supabase не настроен')
+    const { data, error } = await sb.auth.signInWithPassword({ email, password })
+    if (error) throw error
+    setSupaUser({ email: data.user.email!, id: data.user.id })
+    setAuthStatus('authenticated')
+    setShowAuthScreen(false)
+    // Offer upload if user had local data
+    const skipR = await window.api.settings.get('auth_skip')
+    if (skipR.success && skipR.data === '1' && subjects.length > 0) {
+      setShowUploadDialog(true)
+    }
+    await window.api.settings.set('auth_skip', '0')
+  }
+
+  async function handleSignUp(email: string, password: string) {
+    const sb = getSupabase()
+    if (!sb) throw new Error('Supabase не настроен')
+    const { data, error } = await sb.auth.signUp({ email, password })
+    if (error) throw error
+    if (data.session?.user) {
+      setSupaUser({ email: data.user!.email!, id: data.user!.id })
+      setAuthStatus('authenticated')
+      setShowAuthScreen(false)
+    }
+    // Otherwise email confirmation is pending — AuthScreen handles this state
+  }
+
+  async function handleWorkLocally() {
+    await window.api.settings.set('auth_skip', '1')
+    setAuthStatus('local')
+    setShowAuthScreen(false)
+  }
+
+  async function handleSignOut() {
+    const sb = getSupabase()
+    if (sb) await sb.auth.signOut()
+    clearSupabase()
+    setSupaUser(null)
+    setAuthStatus('unauthenticated')
+    setShowAuthScreen(true)
+  }
+
+  async function handleSaveSupabaseConfig(url: string, key: string) {
+    await window.api.settings.set('supabase_url', url.trim())
+    await window.api.settings.set('supabase_anon_key', key.trim())
+    setSupaConfigured(!!(url.trim() && key.trim()))
+    if (url.trim() && key.trim()) {
+      initSupabase(url.trim(), key.trim())
+    } else {
+      clearSupabase()
+    }
+  }
+
   async function handleCheckForUpdates() {
     setCheckStatus('checking')
     const r = await window.api.updater.checkForUpdates()
@@ -896,6 +1000,8 @@ export default function App() {
           appVersion={appVersion}
           checkStatus={checkStatus}
           tulguStatus={tulguStatus}
+          supaUser={supaUser}
+          supaConfigured={supaConfigured}
           onThemeChange={handleThemeChange}
           onGradeScaleChange={handleGradeScaleChange}
           onCreateTag={handleCreateTag}
@@ -903,8 +1009,43 @@ export default function App() {
           onDeleteTag={handleDeleteTag}
           onCheckForUpdates={handleCheckForUpdates}
           onOpenTulguPanel={() => { setShowSettings(false); setShowTulguPanel(true) }}
+          onSaveSupabaseConfig={handleSaveSupabaseConfig}
+          onOpenAuth={() => { setShowSettings(false); setShowAuthScreen(true) }}
+          onSignOut={handleSignOut}
           onClose={() => setShowSettings(false)}
         />
+      )}
+
+      {/* ── Auth screen overlay ────────────────────────────────────────────── */}
+      {showAuthScreen && (
+        <AuthScreen
+          onSignIn={handleSignIn}
+          onSignUp={handleSignUp}
+          onWorkLocally={handleWorkLocally}
+        />
+      )}
+
+      {/* ── Upload local data dialog ───────────────────────────────────────── */}
+      {showUploadDialog && (
+        <div className="modal-overlay" onClick={() => setShowUploadDialog(false)}>
+          <div className="modal" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Загрузить локальные данные?</span>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowUploadDialog(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+                Вы вошли в аккаунт. На этом устройстве есть локальные данные (предметы, задания).
+                Синхронизация с облаком появится в будущих версиях.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={() => setShowUploadDialog(false)}>
+                Понятно
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showTulguPanel && (

@@ -8,23 +8,44 @@ const TAG_COLORS = [
 ]
 
 interface Props {
-  theme:              Theme
-  tags:               Tag[]
-  gradeScale:         number
-  appVersion:         string
-  checkStatus:        'idle' | 'checking' | 'up-to-date' | 'error'
-  tulguStatus:        TulguStatus
-  onThemeChange:      (t: Theme) => void
-  onGradeScaleChange: (scale: number) => void
-  onCreateTag:        (name: string, color: string) => Promise<Tag>
-  onUpdateTag:        (id: number, data: { name?: string; color?: string }) => Promise<void>
-  onDeleteTag:        (id: number) => Promise<void>
-  onCheckForUpdates:  () => void
-  onOpenTulguPanel:   () => void
-  onClose:            () => void
+  theme:                Theme
+  tags:                 Tag[]
+  gradeScale:           number
+  appVersion:           string
+  checkStatus:          'idle' | 'checking' | 'up-to-date' | 'error'
+  tulguStatus:          TulguStatus
+  supaUser:             { email: string; id: string } | null
+  supaConfigured:       boolean
+  onThemeChange:        (t: Theme) => void
+  onGradeScaleChange:   (scale: number) => void
+  onCreateTag:          (name: string, color: string) => Promise<Tag>
+  onUpdateTag:          (id: number, data: { name?: string; color?: string }) => Promise<void>
+  onDeleteTag:          (id: number) => Promise<void>
+  onCheckForUpdates:    () => void
+  onOpenTulguPanel:     () => void
+  onSaveSupabaseConfig: (url: string, key: string) => Promise<void>
+  onOpenAuth:           () => void
+  onSignOut:            () => Promise<void>
+  onClose:              () => void
 }
 
-export default function SettingsPanel({ theme, tags, gradeScale, appVersion, checkStatus, tulguStatus, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onOpenTulguPanel, onClose }: Props) {
+export default function SettingsPanel({ theme, tags, gradeScale, appVersion, checkStatus, tulguStatus, supaUser, supaConfigured, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onOpenTulguPanel, onSaveSupabaseConfig, onOpenAuth, onSignOut, onClose }: Props) {
+  // ── Supabase config form ────────────────────────────────────────────────
+  const [supaUrl,     setSupaUrl]     = useState('')
+  const [supaKey,     setSupaKey]     = useState('')
+  const [supaSaving,  setSupaSaving]  = useState(false)
+  const [supaExpanded, setSupaExpanded] = useState(false)
+
+  async function handleSaveSupabase() {
+    setSupaSaving(true)
+    try {
+      await onSaveSupabaseConfig(supaUrl, supaKey)
+      setSupaExpanded(false)
+    } finally {
+      setSupaSaving(false)
+    }
+  }
+
   // ── New tag form ────────────────────────────────────────────────────────
   const [newName, setNewName]   = useState('')
   const [newColor, setNewColor] = useState(TAG_COLORS[5])
@@ -237,6 +258,84 @@ export default function SettingsPanel({ theme, tags, gradeScale, appVersion, che
           <button className="btn btn-secondary btn-sm" onClick={onOpenTulguPanel}>
             🏫 Настроить расписание ТулГУ
           </button>
+        </div>
+
+        {/* Supabase / account section */}
+        <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>
+          <div className="settings-section-title">Аккаунт</div>
+
+          {supaUser ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                <span style={{ color: 'var(--success)' }}>●</span>{' '}
+                Вы вошли как <strong style={{ color: 'var(--text-primary)' }}>{supaUser.email}</strong>
+              </div>
+              <button className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}
+                onClick={() => void onSignOut()}>
+                Выйти
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {supaConfigured ? (
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  Supabase настроен. Войдите в аккаунт.
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
+                  Авторизация через Supabase. Укажите URL и Anon Key вашего проекта.
+                </div>
+              )}
+
+              {!supaExpanded ? (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {supaConfigured && (
+                    <button className="btn btn-primary btn-sm" onClick={onOpenAuth}>
+                      Войти в аккаунт
+                    </button>
+                  )}
+                  <button className="btn btn-secondary btn-sm"
+                    onClick={() => setSupaExpanded(true)}>
+                    {supaConfigured ? 'Изменить настройки' : 'Настроить Supabase'}
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">Supabase URL</label>
+                    <input
+                      className="form-input"
+                      type="url"
+                      placeholder="https://xxxx.supabase.co"
+                      value={supaUrl}
+                      onChange={(e) => setSupaUrl(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">Anon Key</label>
+                    <input
+                      className="form-input"
+                      type="password"
+                      placeholder="eyJhbGciOiJIUzI1NiIs…"
+                      value={supaKey}
+                      onChange={(e) => setSupaKey(e.target.value)}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn btn-primary btn-sm"
+                      onClick={() => void handleSaveSupabase()}
+                      disabled={supaSaving || !supaUrl.trim() || !supaKey.trim()}>
+                      {supaSaving ? 'Сохраняем…' : 'Сохранить'}
+                    </button>
+                    <button className="btn btn-ghost btn-sm"
+                      onClick={() => setSupaExpanded(false)}>
+                      Отмена
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* About / updates section */}
