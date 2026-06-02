@@ -55,10 +55,10 @@ const api = {
     batchImport: (entries: unknown[], replace: boolean)     => ipcRenderer.invoke('schedule:batchImport', entries, replace)
   },
   tulgu: {
-    fetchGroups:   (baseUrl: string, token: string, entityType: string) =>
-      ipcRenderer.invoke('tulgu:fetchGroups', baseUrl, token, entityType),
-    fetchSchedule: (baseUrl: string, token: string, groupId: string, entityType: string, dateFrom?: string, dateTo?: string) =>
-      ipcRenderer.invoke('tulgu:fetchSchedule', baseUrl, token, groupId, entityType, dateFrom, dateTo),
+    // ТулГУ-specific API (tulsu.ru)
+    fetchTulsuSchedule: (groupNumber: string) =>
+      ipcRenderer.invoke('tulgu:fetchTulsuSchedule', groupNumber),
+    // Config & auto-sync
     getConfig:  () => ipcRenderer.invoke('tulgu:getConfig'),
     saveConfig: (data: unknown) => ipcRenderer.invoke('tulgu:saveConfig', data),
     getStatus:  () => ipcRenderer.invoke('tulgu:getStatus'),
@@ -69,6 +69,11 @@ const api = {
       ipcRenderer.on('tulgu:schedule-updated', (_e, d) => cb(d)),
     removeAllListeners: (channel: string) =>
       ipcRenderer.removeAllListeners(channel),
+    // Generic API proxy (for custom URLs)
+    fetchGroups:   (baseUrl: string, token: string, entityType: string) =>
+      ipcRenderer.invoke('tulgu:fetchGroups', baseUrl, token, entityType),
+    fetchSchedule: (baseUrl: string, token: string, groupId: string, entityType: string, dateFrom?: string, dateTo?: string) =>
+      ipcRenderer.invoke('tulgu:fetchSchedule', baseUrl, token, groupId, entityType, dateFrom, dateTo),
   },
   dashboard: {
     getData: (semesterId?: number | null) => ipcRenderer.invoke('dashboard:getData', semesterId),

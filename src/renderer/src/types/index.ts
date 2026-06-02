@@ -97,12 +97,8 @@ export interface BatchImportResult {
 }
 
 export interface TulguConfig {
-  baseUrl:    string
-  token:      string
-  groupId:    string
-  groupName:  string
-  entityType: 'group' | 'teacher'
-  interval:   string   // '3h' | '6h' | '12h' | '24h' | 'manual'
+  groupNumber: string   // e.g. "Б260221"
+  interval:    string   // '3h' | '6h' | '12h' | '24h' | 'manual'
 }
 
 export interface TulguStatus {

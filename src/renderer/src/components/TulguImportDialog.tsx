@@ -1,53 +1,23 @@
-import { useState } from 'react'
+/**
+ * Диалог ручного импорта расписания из ТулГУ (tulsu.ru).
+ * Используется из раздела «Расписание», кнопка «↓ Импорт из ТулГУ».
+ *
+ * Шаг 1: Ввод номера группы (подтягивается из настроек, если уже сохранён).
+ * Шаг 2: Предпросмотр + выбор режима импорта.
+ * Шаг 3: Результат.
+ */
+
+import { useState, useEffect } from 'react'
 import type { BatchImportEntry, BatchImportResult } from '../types'
 
 const DAYS_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
-
-interface ApiGroup {
-  id:   string
-  name: string
-}
 
 interface Props {
   onImport: (entries: BatchImportEntry[], replace: boolean) => Promise<BatchImportResult>
   onClose:  () => void
 }
 
-type Step = 'config' | 'select' | 'preview' | 'done'
-
-// ── Step indicator ────────────────────────────────────────────────────────────
-
-const STEP_LABELS: Record<Step, string> = {
-  config:  '1. Подключение',
-  select:  '2. Группа / дата',
-  preview: '3. Предпросмотр',
-  done:    '4. Готово',
-}
-
-function StepBar({ current }: { current: Step }) {
-  const steps: Step[] = ['config', 'select', 'preview', 'done']
-  const idx = steps.indexOf(current)
-  return (
-    <div style={{ display: 'flex', gap: 0, marginBottom: 20 }}>
-      {steps.map((s, i) => (
-        <div
-          key={s}
-          style={{
-            flex: 1,
-            padding: '6px 8px',
-            fontSize: 11,
-            fontWeight: i <= idx ? 600 : 400,
-            color: i < idx ? 'var(--primary)' : i === idx ? 'var(--text)' : 'var(--text-muted)',
-            borderBottom: `2px solid ${i <= idx ? 'var(--primary)' : 'var(--border)'}`,
-            textAlign: 'center',
-          }}
-        >
-          {STEP_LABELS[s]}
-        </div>
-      ))}
-    </div>
-  )
-}
+type Step = 'config' | 'preview' | 'done'
 
 // ── Preview table ─────────────────────────────────────────────────────────────
 
@@ -55,24 +25,17 @@ function PreviewTable({ entries }: { entries: BatchImportEntry[] }) {
   if (entries.length === 0)
     return <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Занятий не найдено.</p>
 
-  const sorted = [...entries].sort(
-    (a, b) => a.day_of_week - b.day_of_week || a.start_time.localeCompare(b.start_time)
-  )
-
   return (
-    <div style={{ overflowX: 'auto', maxHeight: 300, overflowY: 'auto' }}>
+    <div style={{ overflowX: 'auto', maxHeight: 280, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
-          <tr style={{ position: 'sticky', top: 0, background: 'var(--bg-secondary)' }}>
-            {['День', 'Время', 'Название', 'Аудитория', 'Преподаватель'].map((h) => (
+          <tr style={{ position: 'sticky', top: 0, background: 'var(--bg-secondary, var(--bg-hover))' }}>
+            {['День', 'Время', 'Дисциплина', 'Ауд.', 'Преподаватель'].map((h) => (
               <th
                 key={h}
                 style={{
-                  padding: '6px 8px',
-                  textAlign: 'left',
-                  fontWeight: 600,
-                  color: 'var(--text-muted)',
-                  borderBottom: '1px solid var(--border)',
+                  padding: '6px 8px', textAlign: 'left', fontWeight: 600,
+                  color: 'var(--text-muted)', borderBottom: '1px solid var(--border)',
                   whiteSpace: 'nowrap',
                 }}
               >
@@ -82,22 +45,21 @@ function PreviewTable({ entries }: { entries: BatchImportEntry[] }) {
           </tr>
         </thead>
         <tbody>
-          {sorted.map((e, i) => (
-            <tr
-              key={i}
-              style={{
-                background: i % 2 === 0 ? 'transparent' : 'var(--bg-secondary)',
-              }}
-            >
-              <td style={{ padding: '5px 8px', whiteSpace: 'nowrap', fontWeight: 600 }}>
+          {entries.map((e, i) => (
+            <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-hover)' }}>
+              <td style={{ padding: '5px 8px', fontWeight: 600, whiteSpace: 'nowrap' }}>
                 {DAYS_SHORT[e.day_of_week] ?? e.day_of_week}
               </td>
-              <td style={{ padding: '5px 8px', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+              <td style={{ padding: '5px 8px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
                 {e.start_time}–{e.end_time}
               </td>
               <td style={{ padding: '5px 8px' }}>{e.title}</td>
-              <td style={{ padding: '5px 8px', color: 'var(--text-muted)' }}>{e.location ?? '—'}</td>
-              <td style={{ padding: '5px 8px', color: 'var(--text-muted)' }}>{e.teacher ?? '—'}</td>
+              <td style={{ padding: '5px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                {e.location ?? '—'}
+              </td>
+              <td style={{ padding: '5px 8px', color: 'var(--text-secondary)' }}>
+                {e.teacher ?? '—'}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -106,63 +68,68 @@ function PreviewTable({ entries }: { entries: BatchImportEntry[] }) {
   )
 }
 
+// ── Step bar ──────────────────────────────────────────────────────────────────
+
+const STEP_LABELS: Record<Step, string> = {
+  config:  '1. Группа',
+  preview: '2. Предпросмотр',
+  done:    '3. Готово',
+}
+
+function StepBar({ current }: { current: Step }) {
+  const steps: Step[] = ['config', 'preview', 'done']
+  const idx = steps.indexOf(current)
+  return (
+    <div style={{ display: 'flex', marginBottom: 20 }}>
+      {steps.map((s, i) => (
+        <div
+          key={s}
+          style={{
+            flex: 1, padding: '6px 4px', fontSize: 11, textAlign: 'center',
+            fontWeight: i <= idx ? 600 : 400,
+            color: i < idx ? 'var(--primary, var(--accent))' : i === idx ? 'var(--text-primary)' : 'var(--text-tertiary)',
+            borderBottom: `2px solid ${i <= idx ? 'var(--accent)' : 'var(--border)'}`,
+          }}
+        >
+          {STEP_LABELS[s]}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function TulguImportDialog({ onImport, onClose }: Props) {
   const [step, setStep]               = useState<Step>('config')
-  const [error, setError]             = useState<string | null>(null)
+  const [groupNumber, setGroupNumber] = useState('')
   const [loading, setLoading]         = useState(false)
-
-  // Step 1 – connection
-  const [baseUrl, setBaseUrl]         = useState('https://tulgu.ru/api')
-  const [token, setToken]             = useState('')
-  const [entityType, setEntityType]   = useState<'group' | 'teacher'>('group')
-
-  // Step 2 – selection
-  const [groups, setGroups]           = useState<ApiGroup[]>([])
-  const [selectedGroup, setSelectedGroup] = useState('')
-  const [dateFrom, setDateFrom]       = useState('')
-  const [dateTo, setDateTo]           = useState('')
-
-  // Step 3 – preview
+  const [error, setError]             = useState<string | null>(null)
   const [preview, setPreview]         = useState<BatchImportEntry[]>([])
-  const [replaceMode, setReplaceMode] = useState<'add' | 'replace'>('add')
-
-  // Step 4 – done
+  const [replaceMode, setReplaceMode] = useState<'add' | 'replace'>('replace')
   const [importResult, setImportResult] = useState<BatchImportResult | null>(null)
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  // Pre-fill group number from saved settings
+  useEffect(() => {
+    void window.api.tulgu.getConfig().then((r) => {
+      if (r.success && r.data.groupNumber) setGroupNumber(r.data.groupNumber)
+    })
+  }, [])
 
-  async function handleFetchGroups() {
-    if (!baseUrl.trim()) { setError('Введите URL API'); return }
+  // ── Fetch schedule for preview ─────────────────────────────────────────────
+
+  async function handleFetch() {
+    const g = groupNumber.trim()
+    if (!g) { setError('Введите номер группы'); return }
     setError(null)
     setLoading(true)
     try {
-      const res = await window.api.tulgu.fetchGroups(baseUrl.trim(), token.trim(), entityType)
-      if (!res.success) throw new Error(res.error)
-      if (res.data.length === 0) throw new Error('Список групп пуст — проверьте URL')
-      setGroups(res.data)
-      setSelectedGroup(res.data[0].id)
-      setStep('select')
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleFetchSchedule() {
-    if (!selectedGroup) { setError('Выберите группу'); return }
-    setError(null)
-    setLoading(true)
-    try {
-      const res = await window.api.tulgu.fetchSchedule(
-        baseUrl.trim(), token.trim(), selectedGroup, entityType,
-        dateFrom || undefined, dateTo || undefined
-      )
-      if (!res.success) throw new Error(res.error)
-      if (res.data.length === 0) throw new Error('Расписание пустое — попробуйте другие даты или группу')
-      setPreview(res.data)
+      const r = await window.api.tulgu.fetchTulsuSchedule(g)
+      if (!r.success) throw new Error(r.error)
+      if (r.data.length === 0) {
+        throw new Error('Расписание пустое — проверьте номер группы или попробуйте позже')
+      }
+      setPreview(r.data)
       setStep('preview')
     } catch (e) {
       setError(String(e))
@@ -171,10 +138,18 @@ export default function TulguImportDialog({ onImport, onClose }: Props) {
     }
   }
 
+  // ── Execute import ─────────────────────────────────────────────────────────
+
   async function handleImport() {
     setError(null)
     setLoading(true)
     try {
+      // Save group number to settings so it's remembered
+      await window.api.tulgu.saveConfig({
+        groupNumber: groupNumber.trim(),
+        interval: 'manual',   // don't change interval on manual import
+      }).catch(() => {/* non-fatal */})
+
       const result = await onImport(preview, replaceMode === 'replace')
       setImportResult(result)
       setStep('done')
@@ -185,16 +160,13 @@ export default function TulguImportDialog({ onImport, onClose }: Props) {
     }
   }
 
-  // ── Unique subject count for summary ───────────────────────────────────────
   const uniqueSubjects = new Set(preview.map((e) => e.subject_name).filter(Boolean)).size
-
-  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
         className="modal"
-        style={{ width: 640, maxWidth: '96vw' }}
+        style={{ width: 660, maxWidth: '96vw' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -206,145 +178,52 @@ export default function TulguImportDialog({ onImport, onClose }: Props) {
         <div className="modal-body" style={{ paddingTop: 0 }}>
           <StepBar current={step} />
 
-          {/* Error banner */}
+          {/* Error */}
           {error && (
-            <div
-              style={{
-                background: 'var(--danger-bg, #fee2e2)',
-                color: 'var(--danger, #ef4444)',
-                border: '1px solid var(--danger, #ef4444)',
-                borderRadius: 6,
-                padding: '8px 12px',
-                fontSize: 13,
-                marginBottom: 16,
-              }}
-            >
+            <div style={{
+              background: 'var(--danger-light)', border: '1px solid var(--danger)',
+              borderRadius: 6, padding: '8px 12px', fontSize: 13, marginBottom: 16,
+              color: 'var(--danger)',
+            }}>
               {error}
             </div>
           )}
 
-          {/* ── Step 1: config ─────────────────────────────────────────────── */}
+          {/* ── Step 1: group number ─────────────────────────────────────── */}
           {step === 'config' && (
             <div>
               <div className="form-group">
-                <label className="form-label">Базовый URL API *</label>
+                <label className="form-label">Номер группы *</label>
                 <input
                   className="form-input"
                   autoFocus
-                  value={baseUrl}
-                  onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder="https://tulgu.ru/api"
+                  value={groupNumber}
+                  onChange={(e) => setGroupNumber(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void handleFetch() }}
+                  placeholder="Например: Б260221"
+                  maxLength={20}
                 />
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                  Приложение перебирает стандартные пути: /groups, /api/groups, /schedule, /api/schedule…
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Токен / ключ доступа (если требуется)</label>
-                <input
-                  className="form-input"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="Оставьте пустым, если авторизация не нужна"
-                  type="password"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Искать по</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {(['group', 'teacher'] as const).map((t) => (
-                    <label
-                      key={t}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        cursor: 'pointer',
-                        fontSize: 13,
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="entityType"
-                        checked={entityType === t}
-                        onChange={() => setEntityType(t)}
-                      />
-                      {t === 'group' ? 'Группе' : 'Преподавателю'}
-                    </label>
-                  ))}
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6, lineHeight: 1.6 }}>
+                  Расписание загружается с{' '}
+                  <strong>tulsu.ru</strong> — отображаются только будущие занятия,
+                  повторяющиеся пары объединяются в одну запись.
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── Step 2: select group + dates ───────────────────────────────── */}
-          {step === 'select' && (
-            <div>
-              <div className="form-group">
-                <label className="form-label">
-                  {entityType === 'group' ? 'Группа' : 'Преподаватель'} *
-                </label>
-                <select
-                  className="form-select"
-                  value={selectedGroup}
-                  onChange={(e) => setSelectedGroup(e.target.value)}
-                  autoFocus
-                >
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
-                  ))}
-                </select>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                  Найдено {groups.length} {entityType === 'group' ? 'групп' : 'преподавателей'}
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div className="form-group">
-                  <label className="form-label">Дата начала (необязательно)</label>
-                  <input
-                    className="form-input"
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Дата конца (необязательно)</label>
-                  <input
-                    className="form-input"
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -8 }}>
-                Если API поддерживает фильтрацию по датам — они будут переданы как параметры date_from / date_to.
-                Если нет, загрузится всё расписание.
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 3: preview ────────────────────────────────────────────── */}
+          {/* ── Step 2: preview ─────────────────────────────────────────── */}
           {step === 'preview' && (
             <div>
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 16,
-                  marginBottom: 12,
-                  fontSize: 13,
-                  color: 'var(--text-muted)',
-                }}
-              >
+              <div style={{ display: 'flex', gap: 20, marginBottom: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
                 <span>
-                  <strong style={{ color: 'var(--text)' }}>{preview.length}</strong> пар
+                  <strong style={{ color: 'var(--text-primary)' }}>{preview.length}</strong> пар
                 </span>
                 <span>
-                  <strong style={{ color: 'var(--text)' }}>{uniqueSubjects}</strong> предметов
+                  <strong style={{ color: 'var(--text-primary)' }}>{uniqueSubjects}</strong> предметов
+                </span>
+                <span style={{ color: 'var(--text-tertiary)' }}>
+                  Группа: <strong>{groupNumber}</strong>
                 </span>
               </div>
 
@@ -353,12 +232,10 @@ export default function TulguImportDialog({ onImport, onClose }: Props) {
               <div style={{ marginTop: 16 }}>
                 <div className="form-label" style={{ marginBottom: 8 }}>Режим импорта</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {(
-                    [
-                      ['add',     'Добавить к существующему расписанию'],
-                      ['replace', 'Заменить расписание полностью (удалить все текущие записи)'],
-                    ] as const
-                  ).map(([val, label]) => (
+                  {([
+                    ['replace', 'Заменить расписание полностью (рекомендуется)'],
+                    ['add',     'Добавить к существующему расписанию'],
+                  ] as const).map(([val, label]) => (
                     <label
                       key={val}
                       style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', fontSize: 13 }}
@@ -378,22 +255,20 @@ export default function TulguImportDialog({ onImport, onClose }: Props) {
             </div>
           )}
 
-          {/* ── Step 4: done ───────────────────────────────────────────────── */}
+          {/* ── Step 3: done ────────────────────────────────────────────── */}
           {step === 'done' && importResult && (
-            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
-              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
-                Импорт завершён
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Добавлено <strong>{importResult.created}</strong> пар
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Импорт завершён</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                Добавлено <strong>{importResult.created}</strong> занятий
                 {importResult.subjectsCreated > 0 && (
-                  <>, автоматически создано <strong>{importResult.subjectsCreated}</strong> новых предметов</>
+                  <>, создано <strong>{importResult.subjectsCreated}</strong> новых предметов</>
                 )}
                 .
               </div>
               {importResult.subjectsCreated > 0 && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 8 }}>
                   Новые предметы можно переименовать в разделе «Задания».
                 </div>
               )}
@@ -408,24 +283,8 @@ export default function TulguImportDialog({ onImport, onClose }: Props) {
               <button className="btn btn-secondary" onClick={onClose}>Отмена</button>
               <button
                 className="btn btn-primary"
-                onClick={() => void handleFetchGroups()}
-                disabled={loading || !baseUrl.trim()}
-              >
-                {loading ? 'Загрузка…' : 'Загрузить список →'}
-              </button>
-            </>
-          )}
-
-          {step === 'select' && (
-            <>
-              <button className="btn btn-secondary" onClick={() => { setStep('config'); setError(null) }}>
-                ← Назад
-              </button>
-              <button className="btn btn-secondary" onClick={onClose}>Отмена</button>
-              <button
-                className="btn btn-primary"
-                onClick={() => void handleFetchSchedule()}
-                disabled={loading || !selectedGroup}
+                onClick={() => void handleFetch()}
+                disabled={loading || !groupNumber.trim()}
               >
                 {loading ? 'Загрузка…' : 'Загрузить расписание →'}
               </button>
@@ -434,7 +293,7 @@ export default function TulguImportDialog({ onImport, onClose }: Props) {
 
           {step === 'preview' && (
             <>
-              <button className="btn btn-secondary" onClick={() => { setStep('select'); setError(null) }}>
+              <button className="btn btn-secondary" onClick={() => { setStep('config'); setError(null) }}>
                 ← Назад
               </button>
               <button className="btn btn-secondary" onClick={onClose}>Отмена</button>
@@ -443,15 +302,13 @@ export default function TulguImportDialog({ onImport, onClose }: Props) {
                 onClick={() => void handleImport()}
                 disabled={loading || preview.length === 0}
               >
-                {loading ? 'Импортируем…' : `Импортировать (${preview.length})`}
+                {loading ? 'Импортируем…' : `Импортировать (${preview.length} пар)`}
               </button>
             </>
           )}
 
           {step === 'done' && (
-            <button className="btn btn-primary" onClick={onClose}>
-              Закрыть
-            </button>
+            <button className="btn btn-primary" onClick={onClose}>Закрыть</button>
           )}
         </div>
       </div>

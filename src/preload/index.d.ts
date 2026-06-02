@@ -58,17 +58,16 @@ declare global {
         batchImport: (entries: BatchImportEntry[], replace: boolean)                          => Promise<IpcResult<BatchImportResult>>
       }
       tulgu: {
-        fetchGroups:   (baseUrl: string, token: string, entityType: 'group' | 'teacher') =>
-          Promise<IpcResult<{ id: string; name: string }[]>>
-        fetchSchedule: (baseUrl: string, token: string, groupId: string, entityType: 'group' | 'teacher', dateFrom?: string, dateTo?: string) =>
-          Promise<IpcResult<BatchImportEntry[]>>
-        getConfig:  () => Promise<IpcResult<TulguConfig>>
-        saveConfig: (data: TulguConfig) => Promise<IpcResult<null>>
-        getStatus:  () => Promise<IpcResult<TulguStatus>>
-        syncNow:    () => Promise<IpcResult<TulguSyncResult>>
-        onStatusChanged:    (cb: (s: TulguStatus) => void) => void
-        onScheduleUpdated:  (cb: (diff: unknown) => void) => void
-        removeAllListeners: (channel: string) => void
+        fetchTulsuSchedule: (groupNumber: string)                                          => Promise<IpcResult<BatchImportEntry[]>>
+        getConfig:          ()                                                             => Promise<IpcResult<TulguConfig>>
+        saveConfig:         (data: TulguConfig)                                           => Promise<IpcResult<null>>
+        getStatus:          ()                                                             => Promise<IpcResult<TulguStatus>>
+        syncNow:            ()                                                             => Promise<IpcResult<TulguSyncResult>>
+        onStatusChanged:    (cb: (s: TulguStatus) => void)                                => void
+        onScheduleUpdated:  (cb: (diff: unknown) => void)                                 => void
+        removeAllListeners: (channel: string)                                              => void
+        fetchGroups:        (baseUrl: string, token: string, entityType: 'group' | 'teacher') => Promise<IpcResult<{ id: string; name: string }[]>>
+        fetchSchedule:      (baseUrl: string, token: string, groupId: string, entityType: 'group' | 'teacher', dateFrom?: string, dateTo?: string) => Promise<IpcResult<BatchImportEntry[]>>
       }
       dashboard: {
         getData: (semesterId?: number | null) => Promise<IpcResult<DashboardData>>

@@ -9,8 +9,6 @@ const INTERVALS = [
   { value: 'manual', label: 'Вручную' },
 ]
 
-interface ApiGroup { id: string; name: string }
-
 interface Props {
   status:            TulguStatus
   onClose:           () => void
@@ -24,26 +22,26 @@ function formatTs(iso: string | null): string {
   })
 }
 
-function DiffBadge({ diff }: { diff: ScheduleDiff }) {
+function DiffSummary({ diff }: { diff: ScheduleDiff }) {
   if (!diff.added.length && !diff.removed.length && !diff.moved.length) return null
   return (
-    <div style={{ marginTop: 8, fontSize: 12, lineHeight: 1.7 }}>
+    <div style={{ marginTop: 8, fontSize: 12, lineHeight: 1.8 }}>
       {diff.added.length > 0 && (
         <div style={{ color: 'var(--success)' }}>
-          + Добавлено ({diff.added.length}): {diff.added.slice(0, 3).join('; ')}
-          {diff.added.length > 3 && ' …'}
+          + Добавлено {diff.added.length}: {diff.added.slice(0, 3).join('; ')}
+          {diff.added.length > 3 && ` и ещё ${diff.added.length - 3}…`}
         </div>
       )}
       {diff.removed.length > 0 && (
         <div style={{ color: 'var(--danger)' }}>
-          − Удалено ({diff.removed.length}): {diff.removed.slice(0, 3).join('; ')}
-          {diff.removed.length > 3 && ' …'}
+          − Удалено {diff.removed.length}: {diff.removed.slice(0, 3).join('; ')}
+          {diff.removed.length > 3 && ` и ещё ${diff.removed.length - 3}…`}
         </div>
       )}
       {diff.moved.length > 0 && (
         <div style={{ color: 'var(--warning)' }}>
-          ↔ Перенесено ({diff.moved.length}): {diff.moved.slice(0, 2).join('; ')}
-          {diff.moved.length > 2 && ' …'}
+          ↔ Перенесено {diff.moved.length}: {diff.moved.slice(0, 2).join('; ')}
+          {diff.moved.length > 2 && ` и ещё ${diff.moved.length - 2}…`}
         </div>
       )}
     </div>
@@ -51,19 +49,14 @@ function DiffBadge({ diff }: { diff: ScheduleDiff }) {
 }
 
 export default function TulguPanel({ status, onClose, onScheduleRefresh }: Props) {
-  const [config, setConfig] = useState<TulguConfig>({
-    baseUrl: '', token: '', groupId: '', groupName: '', entityType: 'group', interval: 'manual'
-  })
-  const [groups, setGroups]             = useState<ApiGroup[]>([])
-  const [loadingGroups, setLoadingGroups] = useState(false)
-  const [groupsError, setGroupsError]   = useState<string | null>(null)
-  const [saving, setSaving]             = useState(false)
-  const [saveState, setSaveState]       = useState<'idle' | 'saved'>('idle')
-  const [syncing, setSyncing]           = useState(status.isSyncing)
-  const [syncDiff, setSyncDiff]         = useState<ScheduleDiff | null>(null)
-  const [syncMsg, setSyncMsg]           = useState<string | null>(null)
-  const [syncError, setSyncError]       = useState<string | null>(null)
-  const [liveStatus, setLiveStatus]     = useState<TulguStatus>(status)
+  const [config, setConfig] = useState<TulguConfig>({ groupNumber: '', interval: 'manual' })
+  const [saving, setSaving]         = useState(false)
+  const [saveState, setSaveState]   = useState<'idle' | 'saved'>('idle')
+  const [syncing, setSyncing]       = useState(status.isSyncing)
+  const [syncDiff, setSyncDiff]     = useState<ScheduleDiff | null>(null)
+  const [syncMsg, setSyncMsg]       = useState<string | null>(null)
+  const [syncError, setSyncError]   = useState<string | null>(null)
+  const [liveStatus, setLiveStatus] = useState<TulguStatus>(status)
 
   // Load saved config on open
   useEffect(() => {
@@ -72,36 +65,13 @@ export default function TulguPanel({ status, onClose, onScheduleRefresh }: Props
     })
   }, [])
 
-  // Track live status from background sync
+  // Mirror incoming status prop (updated by App.tsx from IPC events)
   useEffect(() => {
     setLiveStatus(status)
     setSyncing(status.isSyncing)
   }, [status])
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-
-  async function handleLoadGroups() {
-    if (!config.baseUrl.trim()) return
-    setLoadingGroups(true)
-    setGroupsError(null)
-    try {
-      const r = await window.api.tulgu.fetchGroups(
-        config.baseUrl.trim(), config.token.trim(), config.entityType
-      )
-      if (!r.success) throw new Error(r.error)
-      if (r.data.length === 0) throw new Error('Список пуст — проверьте URL')
-      setGroups(r.data)
-      // Auto-select first if nothing saved yet
-      if (!config.groupId) {
-        const first = r.data[0]
-        setConfig((c) => ({ ...c, groupId: first.id, groupName: first.name }))
-      }
-    } catch (e) {
-      setGroupsError(String(e))
-    } finally {
-      setLoadingGroups(false)
-    }
-  }
 
   async function handleSave() {
     setSaving(true)
@@ -115,11 +85,12 @@ export default function TulguPanel({ status, onClose, onScheduleRefresh }: Props
   }
 
   async function handleSyncNow() {
+    if (!config.groupNumber.trim()) return
     setSyncing(true)
     setSyncDiff(null)
     setSyncMsg(null)
     setSyncError(null)
-    // Save current config first
+    // Save first so the scheduler uses the latest group number
     await window.api.tulgu.saveConfig(config)
     try {
       const r = await window.api.tulgu.syncNow()
@@ -135,7 +106,7 @@ export default function TulguPanel({ status, onClose, onScheduleRefresh }: Props
       } else {
         setSyncMsg('Расписание не изменилось')
       }
-      // Refresh live status
+      // Refresh live status counter
       const s = await window.api.tulgu.getStatus()
       if (s.success) setLiveStatus(s.data)
     } catch (e) {
@@ -147,7 +118,7 @@ export default function TulguPanel({ status, onClose, onScheduleRefresh }: Props
     }
   }
 
-  const configured = !!(config.baseUrl && config.groupId)
+  const configured = !!config.groupNumber.trim()
 
   return (
     <div className="settings-overlay" onClick={onClose}>
@@ -166,18 +137,23 @@ export default function TulguPanel({ status, onClose, onScheduleRefresh }: Props
 
         {/* ── Status ─────────────────────────────────────────────────────── */}
         <div className="settings-section">
-          <div className="settings-section-title">Статус</div>
+          <div className="settings-section-title">Статус синхронизации</div>
 
           {liveStatus.lastError ? (
             <div style={{
               background: 'var(--danger-light)', border: '1px solid var(--danger)',
               borderRadius: 6, padding: '8px 12px', fontSize: 12, marginBottom: 10
             }}>
-              <strong style={{ color: 'var(--danger)' }}>⚠ Ошибка</strong>
-              <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>{liveStatus.lastError}</div>
+              <strong style={{ color: 'var(--danger)' }}>⚠ Ошибка:</strong>{' '}
+              <span style={{ color: 'var(--text-secondary)' }}>{liveStatus.lastError}</span>
               {liveStatus.lastErrorAt && (
                 <div style={{ color: 'var(--text-tertiary)', marginTop: 2 }}>
                   {formatTs(liveStatus.lastErrorAt)}
+                </div>
+              )}
+              {liveStatus.lastUpdated && (
+                <div style={{ color: 'var(--text-tertiary)', marginTop: 2 }}>
+                  Последнее успешное: {formatTs(liveStatus.lastUpdated)}
                 </div>
               )}
             </div>
@@ -192,127 +168,55 @@ export default function TulguPanel({ status, onClose, onScheduleRefresh }: Props
             </div>
           )}
 
-          {syncMsg && !syncError && (
-            <div style={{ fontSize: 12, color: 'var(--success)', marginBottom: 8 }}>
-              ✓ {syncMsg}
+          {syncMsg && (
+            <div style={{ fontSize: 12, color: syncError ? 'var(--danger)' : 'var(--success)', marginBottom: 6 }}>
+              {syncError ? `⚠ ${syncError}` : `✓ ${syncMsg}`}
             </div>
           )}
-          {syncError && (
-            <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>
+          {!syncMsg && syncError && (
+            <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 6 }}>
               ⚠ {syncError}
             </div>
           )}
-          {syncDiff && <DiffBadge diff={syncDiff} />}
+          {syncDiff && <DiffSummary diff={syncDiff} />}
 
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => void handleSyncNow()}
-            disabled={syncing || !configured}
-            style={{ marginTop: syncDiff ? 10 : 0 }}
-          >
-            {syncing ? '⟳ Синхронизация…' : 'Обновить сейчас'}
-          </button>
-          {!configured && (
-            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
-              Настройте подключение ниже, чтобы включить синхронизацию
-            </div>
-          )}
+          <div style={{ marginTop: syncDiff ? 12 : 0, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => void handleSyncNow()}
+              disabled={syncing || !configured}
+            >
+              {syncing ? '⟳ Обновление…' : 'Обновить сейчас'}
+            </button>
+            {!configured && (
+              <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                Введите номер группы ниже
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* ── Connection ─────────────────────────────────────────────────── */}
+        {/* ── Group number ────────────────────────────────────────────────── */}
         <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>
-          <div className="settings-section-title">Подключение к API</div>
+          <div className="settings-section-title">Группа</div>
 
           <div className="form-group">
-            <label className="form-label">Базовый URL</label>
+            <label className="form-label">Номер группы ТулГУ</label>
             <input
               className="form-input"
-              value={config.baseUrl}
-              onChange={(e) => setConfig((c) => ({ ...c, baseUrl: e.target.value }))}
-              placeholder="https://tulgu.ru/api"
+              value={config.groupNumber}
+              onChange={(e) => setConfig((c) => ({ ...c, groupNumber: e.target.value }))}
+              placeholder="Например: Б260221"
+              maxLength={20}
+              autoFocus
             />
             <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
-              Приложение само перебирает стандартные пути (/api/groups, /api/schedule…)
+              Используется API:{' '}
+              <code style={{ fontSize: 10, background: 'var(--bg-hover)', padding: '1px 4px', borderRadius: 3 }}>
+                tulsu.ru/schedule/queries/GetSchedule.php?search_field=GROUP_P&amp;search_value=…
+              </code>
             </div>
           </div>
-
-          <div className="form-group">
-            <label className="form-label">Токен / ключ доступа (если нужен)</label>
-            <input
-              className="form-input"
-              type="password"
-              value={config.token}
-              onChange={(e) => setConfig((c) => ({ ...c, token: e.target.value }))}
-              placeholder="Оставьте пустым при открытом API"
-            />
-          </div>
-        </div>
-
-        {/* ── Group selection ─────────────────────────────────────────────── */}
-        <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>
-          <div className="settings-section-title">Группа / преподаватель</div>
-
-          <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-            {(['group', 'teacher'] as const).map((t) => (
-              <label
-                key={t}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}
-              >
-                <input
-                  type="radio"
-                  name="entityType"
-                  checked={config.entityType === t}
-                  onChange={() => setConfig((c) => ({ ...c, entityType: t, groupId: '', groupName: '' }))}
-                />
-                {t === 'group' ? 'По группе' : 'По преподавателю'}
-              </label>
-            ))}
-          </div>
-
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => void handleLoadGroups()}
-            disabled={loadingGroups || !config.baseUrl.trim()}
-          >
-            {loadingGroups ? 'Загрузка…' : `Загрузить список ${config.entityType === 'group' ? 'групп' : 'преподавателей'}`}
-          </button>
-
-          {groupsError && (
-            <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{groupsError}</div>
-          )}
-
-          {groups.length > 0 && (
-            <div className="form-group" style={{ marginTop: 12 }}>
-              <label className="form-label">
-                {config.entityType === 'group' ? 'Группа' : 'Преподаватель'}
-              </label>
-              <select
-                className="form-select"
-                value={config.groupId}
-                onChange={(e) => {
-                  const g = groups.find((x) => x.id === e.target.value)
-                  setConfig((c) => ({ ...c, groupId: e.target.value, groupName: g?.name ?? '' }))
-                }}
-              >
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
-                ))}
-              </select>
-              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                Найдено: {groups.length}
-              </div>
-            </div>
-          )}
-
-          {groups.length === 0 && config.groupId && (
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>
-              Сохранено:{' '}
-              <strong>{config.groupName || config.groupId}</strong>
-              <span style={{ color: 'var(--text-tertiary)', marginLeft: 4 }}>
-                — нажмите «Загрузить список», чтобы изменить
-              </span>
-            </div>
-          )}
         </div>
 
         {/* ── Auto-sync interval ──────────────────────────────────────────── */}
@@ -320,7 +224,7 @@ export default function TulguPanel({ status, onClose, onScheduleRefresh }: Props
           <div className="settings-section-title">Автоматическое обновление</div>
 
           <div className="form-group">
-            <label className="form-label">Интервал проверки</label>
+            <label className="form-label">Интервал</label>
             <select
               className="form-select"
               value={config.interval}
@@ -332,35 +236,22 @@ export default function TulguPanel({ status, onClose, onScheduleRefresh }: Props
             </select>
           </div>
 
-          {config.interval !== 'manual' ? (
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
-              Расписание обновляется при запуске и по расписанию.
-              При ошибке сети — автоматический повтор через 15 минут.
-              Если данные не изменились — уведомление не показывается.
-            </div>
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-              Обновляйте расписание вручную кнопкой «Обновить сейчас».
-            </div>
-          )}
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
+            {config.interval !== 'manual'
+              ? 'При запуске и по расписанию расписание обновляется автоматически. При ошибке — повтор через 15 мин. Если данные не изменились — уведомление не показывается.'
+              : 'Обновляйте расписание вручную кнопкой «Обновить сейчас».'}
+          </div>
         </div>
 
         {/* ── Save ───────────────────────────────────────────────────────── */}
-        <div
-          className="settings-section"
-          style={{ borderTop: '1px solid var(--border)', paddingBottom: 24 }}
-        >
+        <div className="settings-section" style={{ borderTop: '1px solid var(--border)', paddingBottom: 24 }}>
           <button
             className="btn btn-primary"
             style={{ width: '100%' }}
             onClick={() => void handleSave()}
             disabled={saving}
           >
-            {saving
-              ? 'Сохраняем…'
-              : saveState === 'saved'
-              ? '✓ Сохранено'
-              : 'Сохранить настройки'}
+            {saving ? 'Сохраняем…' : saveState === 'saved' ? '✓ Сохранено' : 'Сохранить настройки'}
           </button>
         </div>
       </div>

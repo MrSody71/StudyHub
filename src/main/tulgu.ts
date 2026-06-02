@@ -179,7 +179,119 @@ function parseLessons(data: unknown): BatchImportEntry[] {
   return entries
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
+// ── ТулГУ (tulsu.ru) specific API ────────────────────────────────────────────
+//
+// Endpoint: GET https://tulsu.ru/schedule/queries/GetSchedule.php
+//           ?search_field=GROUP_P&search_value=<groupNumber>
+//
+// Response: array of objects:
+//   DATE_Z  — "DD.MM.YYYY"
+//   TIME_Z  — "HH:MM - HH:MM"
+//   DISCIP  — discipline name
+//   KOW     — lesson type ("Лекции", "Лабораторные работы", …)
+//   AUD     — classroom
+//   PREP    — teacher full name
+//   GROUPS  — [{ GROUP_P, PRIM }]
+//   CLASS   — class code
+
+interface TulsuItem {
+  DATE_Z:  string
+  TIME_Z:  string
+  DISCIP:  string
+  KOW:     string
+  AUD:     string
+  PREP:    string
+  GROUPS:  Array<{ GROUP_P: string; PRIM: string }>
+  CLASS:   string
+}
+
+/**
+ * Fetches schedule for a specific ТулГУ group from tulsu.ru.
+ * - Filters to future dates only (DATE_Z >= today).
+ * - Deduplicates by (day_of_week, start_time, end_time, title) so repeated
+ *   weekly occurrences collapse into one schedule_entry row.
+ *
+ * Note: fetch runs in the Electron main process (Node.js) so CORS is not an
+ * issue. A corsproxy.io fallback is included in case of direct network errors.
+ */
+export async function fetchTulsuSchedule(groupNumber: string): Promise<BatchImportEntry[]> {
+  const params    = new URLSearchParams({ search_field: 'GROUP_P', search_value: groupNumber.trim() })
+  const directUrl = `https://tulsu.ru/schedule/queries/GetSchedule.php?${params}`
+  const proxyUrl  = `https://corsproxy.io/?url=${encodeURIComponent(directUrl)}`
+
+  let raw: string
+  try {
+    raw = await httpGet(directUrl)
+  } catch {
+    // Main-process fetch bypasses browser CORS, but network errors still happen —
+    // fall back to corsproxy.io as a secondary mirror.
+    raw = await httpGet(proxyUrl)
+  }
+
+  let data: unknown
+  try {
+    data = JSON.parse(raw)
+  } catch {
+    throw new Error('API вернул не JSON — проверьте номер группы')
+  }
+
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new Error('Расписание не найдено — проверьте номер группы (например: Б260221)')
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const seen    = new Set<string>()
+  const entries: BatchImportEntry[] = []
+
+  for (const item of data as TulsuItem[]) {
+    if (!item.DATE_Z || !item.TIME_Z) continue
+
+    // "DD.MM.YYYY" → Date
+    const [dd, mm, yyyy] = (item.DATE_Z ?? '').split('.')
+    if (!dd || !mm || !yyyy) continue
+    const date = new Date(`${mm}/${dd}/${yyyy}`)
+    if (isNaN(date.getTime())) continue
+    if (date < today) continue          // skip past dates
+
+    // "HH:MM - HH:MM"
+    const timeParts = (item.TIME_Z ?? '').split(' - ')
+    const startTime = timeParts[0]?.trim()
+    const endTime   = timeParts[1]?.trim()
+    if (!startTime || !endTime) continue
+
+    const dow        = (date.getDay() + 6) % 7   // 0 = Пн … 6 = Вс
+    const discipline = item.DISCIP?.trim() || 'Занятие'
+    const lessonType = item.KOW?.trim()   || ''
+    const title      = lessonType ? `${discipline} (${lessonType})` : discipline
+
+    // Deduplicate: same slot in different weeks → one schedule_entry
+    const key = `${dow}|${startTime}|${endTime}|${title.toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    entries.push({
+      subject_name: discipline,
+      title,
+      day_of_week:  dow,
+      start_time:   startTime,
+      end_time:     endTime,
+      location:     item.AUD?.trim()  || null,
+      teacher:      item.PREP?.trim() || null,
+    })
+  }
+
+  entries.sort((a, b) =>
+    a.day_of_week !== b.day_of_week
+      ? a.day_of_week - b.day_of_week
+      : a.start_time.localeCompare(b.start_time)
+  )
+
+  return entries
+}
+
+// ── Generic Public API ────────────────────────────────────────────────────────
 
 export async function fetchTulguGroups(
   baseUrl: string,

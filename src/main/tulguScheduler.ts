@@ -13,7 +13,7 @@
 import { BrowserWindow, Notification } from 'electron'
 import { getSetting, setSetting } from './db/settings'
 import { getAllScheduleEntries, batchImportScheduleEntries } from './db/schedule'
-import { fetchTulguSchedule } from './tulgu'
+import { fetchTulsuSchedule } from './tulgu'
 import type { ScheduleDiff, TulguStatus, TulguSyncResult } from '../renderer/src/types'
 import type { ScheduleEntryRow, BatchImportEntry } from './db/schedule'
 
@@ -104,13 +104,9 @@ function computeDiff(
 export async function syncNow(isManual = false): Promise<TulguSyncResult> {
   if (isSyncing) return { changed: false, diff: { added: [], removed: [], moved: [] } }
 
-  const baseUrl    = getSetting('tulgu.baseUrl')    ?? ''
-  const groupId    = getSetting('tulgu.groupId')    ?? ''
-  const entityType = (getSetting('tulgu.entityType') ?? 'group') as 'group' | 'teacher'
-  const token      = getSetting('tulgu.token')      ?? ''
-
-  if (!baseUrl || !groupId) {
-    throw new Error('ТулГУ не настроен: укажите URL API и выберите группу')
+  const groupNumber = getSetting('tulgu.groupNumber') ?? ''
+  if (!groupNumber) {
+    throw new Error('ТулГУ не настроен: введите номер группы в настройках')
   }
 
   isSyncing = true
@@ -120,7 +116,7 @@ export async function syncNow(isManual = false): Promise<TulguSyncResult> {
   if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
 
   try {
-    const incoming = await fetchTulguSchedule(baseUrl, token, groupId, entityType)
+    const incoming = await fetchTulsuSchedule(groupNumber)
     const existing = getAllScheduleEntries()
     const diff     = computeDiff(existing, incoming)
     const changed  = diff.added.length > 0 || diff.removed.length > 0 || diff.moved.length > 0
