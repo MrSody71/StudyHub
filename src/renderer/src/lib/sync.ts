@@ -82,24 +82,24 @@ export function pushTaskTags(
   const sb = getSupabase()
   if (!sb || !navigator.onLine) return
   const now = new Date().toISOString()
-  sb.from('task_tags')
-    .delete()
-    .eq('task_id', taskId)
-    .eq('user_id', userId)
-    .then(() => {
-      if (tagIds.length === 0) return Promise.resolve({ error: null })
-      return sb.from('task_tags').upsert(
-        tagIds.map((tagId) => ({
-          task_id: taskId, tag_id: tagId,
-          user_id: userId,
-          created_at: now, updated_at: now,
-        })),
-        { onConflict: 'task_id,tag_id' }
-      )
-    })
-    .then((r) => {
-      if (r?.error) console.warn('[sync] push task_tags error', r.error.message)
-    })
+  void (async () => {
+    const { error: delErr } = await sb
+      .from('task_tags')
+      .delete()
+      .eq('task_id', taskId)
+      .eq('user_id', userId)
+    if (delErr) { console.warn('[sync] push task_tags delete error', delErr.message); return }
+    if (tagIds.length === 0) return
+    const { error } = await sb.from('task_tags').upsert(
+      tagIds.map((tagId) => ({
+        task_id: taskId, tag_id: tagId,
+        user_id: userId,
+        created_at: now, updated_at: now,
+      })),
+      { onConflict: 'task_id,tag_id' }
+    )
+    if (error) console.warn('[sync] push task_tags error', error.message)
+  })()
 }
 
 // ── Pull helpers ─────────────────────────────────────────────────────────────
@@ -118,8 +118,8 @@ export async function pullAll(
 
   for (const table of SYNC_TABLES) {
     try {
-      let q = sb.from(table).select('*').eq('user_id', userId)
-      if (since) q = (q as ReturnType<typeof sb.from>).gt('updated_at', since)
+      const base = sb.from(table).select('*').eq('user_id', userId)
+      const q    = since ? base.gt('updated_at', since) : base
       const { data, error } = await q
       if (error) { console.warn('[sync] pull error', table, error.message); continue }
       if (!data || data.length === 0) continue
