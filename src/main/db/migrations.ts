@@ -247,6 +247,15 @@ const migrations: Migration[] = [
     up: (db) => {
       db.exec(`ALTER TABLE schedule_entries ADD COLUMN entry_date TEXT;`)
     }
+  },
+  {
+    // storage_path: Supabase Storage object path for web-version file attachments.
+    // NULL on desktop (file is local); set to 'attachments/<user_id>/<uuid>/<filename>'
+    // on web so the client can download/delete it via the Storage API.
+    version: 14,
+    up: (db) => {
+      db.exec(`ALTER TABLE attachments ADD COLUMN storage_path TEXT;`)
+    }
   }
 ]
 

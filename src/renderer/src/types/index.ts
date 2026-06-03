@@ -66,6 +66,7 @@ export interface Attachment {
   mime_type:            string
   is_folder:            number        // 0 | 1
   parent_attachment_id: number | null
+  storage_path:         string | null // Supabase Storage path (web version)
   created_at:           string
 }
 
