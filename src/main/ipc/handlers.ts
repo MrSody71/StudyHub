@@ -7,7 +7,7 @@ import { getAllSemesters, createSemester, updateSemester, deleteSemester, setAct
 import { getTasksBySubject, getAllTasksWithDeadline, createTask, updateTask, deleteTask, completeTaskAndSpawnNext } from '../db/tasks'
 import {
   getAttachmentsByTask, addAttachment, deleteAttachment, openAttachment,
-  addAttachmentMultiple, addFolder,
+  addAttachmentMultiple, addFolder, getAttachmentsBySubject,
 } from '../db/attachments'
 import {
   getSubtasksByTask, createSubtask, updateSubtask, deleteSubtask, reorderSubtasks
@@ -21,6 +21,10 @@ import {
   batchImportScheduleEntries
 } from '../db/schedule'
 import { fetchTulguGroups, fetchTulguSchedule, fetchTulsuSchedule } from '../tulgu'
+import {
+  moodleLogin, moodleLogout, getMoodleStatus, getMoodleCourses,
+  mapMoodleCourse, unmapMoodleCourse, moodleSyncAll,
+} from '../moodle'
 import { syncNow, getTulguStatus, restartTulguScheduler } from '../tulguScheduler'
 import { createSession, getSessionStats } from '../db/sessions'
 import { getGradesBySubject, createGrade, updateGrade, deleteGrade, getSubjectGradeStats, getAllGrades } from '../db/grades'
@@ -61,7 +65,8 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('tasks:completeRecurring',   (_e, id: number)       => wrap(() => completeTaskAndSpawnNext(id)))
 
   // ── Attachments ───────────────────────────────────────────────────────────
-  ipcMain.handle('attachments:getByTask',   (_e, taskId: number)                    => wrap(() => getAttachmentsByTask(taskId)))
+  ipcMain.handle('attachments:getByTask',      (_e, taskId: number)    => wrap(() => getAttachmentsByTask(taskId)))
+  ipcMain.handle('attachments:getBySubject',   (_e, subjectId: number) => wrap(() => getAttachmentsBySubject(subjectId)))
   ipcMain.handle('attachments:add',         (_e, taskId: number, filePath: string)  => wrap(() => addAttachment(taskId, filePath)))
   ipcMain.handle('attachments:addMultiple', (_e, taskId: number, paths: string[])   => wrap(() => addAttachmentMultiple(taskId, paths)))
   ipcMain.handle('attachments:addFolder',   (_e, taskId: number, src: string, name: string) => wrap(() => addFolder(taskId, src, name)))
@@ -223,6 +228,44 @@ export function setupIpcHandlers(): void {
     })
     if (result.canceled || result.filePaths.length === 0) return { success: true, data: null }
     return { success: true, data: result.filePaths[0] }
+  })
+
+  // ── Moodle ТулГУ ─────────────────────────────────────────────────────────
+  ipcMain.handle('moodle:login', async (_e, username: string, password: string) => {
+    try {
+      const data = await moodleLogin(username, password)
+      return { success: true, data }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('moodle:logout', () => wrap(() => { moodleLogout(); return null }))
+  ipcMain.handle('moodle:getStatus',  () => wrap(() => getMoodleStatus()))
+  ipcMain.handle('moodle:getCourses', async () => {
+    try {
+      const data = await getMoodleCourses()
+      return { success: true, data }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('moodle:mapCourse', (_e, moodleCourseId: number, subjectId: number, courseName?: string) =>
+    wrap(() => { mapMoodleCourse(moodleCourseId, subjectId, courseName); return null })
+  )
+
+  ipcMain.handle('moodle:unmapCourse', (_e, moodleCourseId: number) =>
+    wrap(() => { unmapMoodleCourse(moodleCourseId); return null })
+  )
+
+  ipcMain.handle('moodle:syncAll', async () => {
+    try {
+      const data = await moodleSyncAll()
+      return { success: true, data }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
   })
 
   ipcMain.handle(

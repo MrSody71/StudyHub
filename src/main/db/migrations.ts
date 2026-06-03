@@ -256,6 +256,57 @@ const migrations: Migration[] = [
     up: (db) => {
       db.exec(`ALTER TABLE attachments ADD COLUMN storage_path TEXT;`)
     }
+  },
+  {
+    // Moodle ТулГУ integration:
+    // - subjects.moodle_course_id  — links a subject to a Moodle course
+    // - tasks.moodle_assignment_id — dedup key (e.g. "moodle_12345")
+    // - attachments: make task_id nullable (subject-level files have task_id=NULL),
+    //   add subject_id and moodle_file_url for dedup
+    version: 15,
+    up: (db) => {
+      // Recreate attachments with nullable task_id + new columns.
+      // ORDER BY id ensures parent rows are inserted before child rows so
+      // the self-referential FK (parent_attachment_id) is satisfied.
+      db.exec(`
+        CREATE TABLE attachments_new (
+          id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+          task_id              INTEGER REFERENCES tasks(id)    ON DELETE CASCADE,
+          subject_id           INTEGER REFERENCES subjects(id) ON DELETE CASCADE,
+          filename             TEXT    NOT NULL,
+          filepath             TEXT    NOT NULL,
+          size                 INTEGER NOT NULL DEFAULT 0,
+          mime_type            TEXT    NOT NULL DEFAULT 'application/octet-stream',
+          is_folder            INTEGER NOT NULL DEFAULT 0 CHECK (is_folder IN (0,1)),
+          parent_attachment_id INTEGER REFERENCES attachments_new(id) ON DELETE CASCADE,
+          moodle_file_url      TEXT,
+          storage_path         TEXT,
+          is_deleted           INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0,1)),
+          updated_at           TEXT    NOT NULL DEFAULT '2020-01-01T00:00:00.000Z',
+          created_at           TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+
+        INSERT INTO attachments_new
+          (id, task_id, subject_id, filename, filepath, size, mime_type,
+           is_folder, parent_attachment_id, moodle_file_url, storage_path,
+           is_deleted, updated_at, created_at)
+        SELECT
+          id, task_id, NULL, filename, filepath, size, mime_type,
+          is_folder, parent_attachment_id, NULL, storage_path,
+          is_deleted, updated_at, created_at
+        FROM attachments ORDER BY id;
+
+        DROP TABLE attachments;
+        ALTER TABLE attachments_new RENAME TO attachments;
+
+        CREATE INDEX IF NOT EXISTS idx_attachments_parent  ON attachments(parent_attachment_id);
+        CREATE INDEX IF NOT EXISTS idx_attachments_task    ON attachments(task_id);
+        CREATE INDEX IF NOT EXISTS idx_attachments_subject ON attachments(subject_id);
+      `)
+
+      db.exec(`ALTER TABLE subjects ADD COLUMN moodle_course_id TEXT;`)
+      db.exec(`ALTER TABLE tasks    ADD COLUMN moodle_assignment_id TEXT;`)
+    }
   }
 ]
 

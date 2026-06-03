@@ -24,7 +24,8 @@ const api = {
     completeRecurring: (id: number)                => ipcRenderer.invoke('tasks:completeRecurring', id)
   },
   attachments: {
-    getByTask:   (taskId: number)                              => ipcRenderer.invoke('attachments:getByTask', taskId),
+    getByTask:    (taskId: number)    => ipcRenderer.invoke('attachments:getByTask', taskId),
+    getBySubject: (subjectId: number) => ipcRenderer.invoke('attachments:getBySubject', subjectId),
     add:         (taskId: number, filePath: string)            => ipcRenderer.invoke('attachments:add', taskId, filePath),
     addMultiple: (taskId: number, paths: string[])             => ipcRenderer.invoke('attachments:addMultiple', taskId, paths),
     addFolder:   (taskId: number, src: string, name: string)   => ipcRenderer.invoke('attachments:addFolder', taskId, src, name),
@@ -112,6 +113,19 @@ const api = {
   dialog: {
     openFile:      () => ipcRenderer.invoke('dialog:openFile'),
     openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
+  },
+  moodle: {
+    login:       (username: string, password: string) => ipcRenderer.invoke('moodle:login', username, password),
+    logout:      ()                                   => ipcRenderer.invoke('moodle:logout'),
+    getStatus:   ()                                   => ipcRenderer.invoke('moodle:getStatus'),
+    getCourses:  ()                                   => ipcRenderer.invoke('moodle:getCourses'),
+    mapCourse:   (moodleCourseId: number, subjectId: number, courseName?: string) =>
+      ipcRenderer.invoke('moodle:mapCourse', moodleCourseId, subjectId, courseName),
+    unmapCourse: (moodleCourseId: number) => ipcRenderer.invoke('moodle:unmapCourse', moodleCourseId),
+    syncAll:     ()                       => ipcRenderer.invoke('moodle:syncAll'),
+    onSyncProgress: (cb: (p: unknown) => void) =>
+      ipcRenderer.on('moodle:sync-progress', (_e, p) => cb(p)),
+    removeAllListeners: (channel: string) => ipcRenderer.removeAllListeners(channel),
   },
   updater: {
     checkForUpdates: () => ipcRenderer.invoke('updater:checkForUpdates'),

@@ -154,6 +154,19 @@ export default function App() {
       console.error('[updater]', msg)
       setCheckStatus('error')
     })
+
+    // Moodle auto-sync once per day on startup
+    void (async () => {
+      try {
+        const r = await window.api.moodle.getStatus()
+        if (!r.success || !r.data.isLoggedIn) return
+        const lastSync = r.data.lastSyncAt
+        const age      = lastSync ? Date.now() - new Date(lastSync).getTime() : Infinity
+        if (age > 24 * 60 * 60 * 1000) {
+          await window.api.moodle.syncAll()
+        }
+      } catch { /* ignore — errors reported via moodle:sync-progress */ }
+    })()
   }, [])
 
   // Reload view-specific data when switching views
@@ -1101,6 +1114,7 @@ export default function App() {
         <SettingsPanel
           theme={theme}
           tags={tags}
+          subjects={subjects}
           gradeScale={gradeScale}
           appVersion={appVersion}
           checkStatus={checkStatus}
@@ -1120,6 +1134,7 @@ export default function App() {
           onOpenAuth={() => { setShowSettings(false); setShowAuthScreen(true) }}
           onSignOut={handleSignOut}
           onManualSync={() => void handleManualSync()}
+          onSubjectsChanged={() => { void loadSubjects(); void loadArchivedSubjects() }}
           onClose={() => setShowSettings(false)}
         />
       )}

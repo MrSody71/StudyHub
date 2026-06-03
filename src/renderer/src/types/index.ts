@@ -59,14 +59,16 @@ export interface Subtask {
 
 export interface Attachment {
   id:                   number
-  task_id:              number
+  task_id:              number | null  // null for subject-level attachments (Moodle files)
+  subject_id:           number | null  // set for subject-level Moodle attachments
   filename:             string
   filepath:             string
   size:                 number
   mime_type:            string
-  is_folder:            number        // 0 | 1
+  is_folder:            number         // 0 | 1
   parent_attachment_id: number | null
-  storage_path:         string | null // Supabase Storage path (web version)
+  moodle_file_url:      string | null  // Moodle fileurl — used for dedup
+  storage_path:         string | null  // Supabase Storage path (web version)
   created_at:           string
 }
 
@@ -219,6 +221,36 @@ export interface DayStat {
   total_seconds: number
   session_count: number
 }
+
+// ── Moodle ТулГУ ─────────────────────────────────────────────────────────────
+
+export interface MoodleStatus {
+  isLoggedIn: boolean
+  userId:     number | null
+  fullname:   string | null
+  lastSyncAt: string | null
+  lastError:  string | null
+}
+
+export interface MoodleCourse {
+  id:         number
+  fullname:   string
+  shortname:  string
+  subject_id: number | null  // null = not yet mapped to a local subject
+}
+
+export interface MoodleSyncProgress {
+  stage:   'courses' | 'assignments' | 'files' | 'done' | 'error'
+  message: string
+}
+
+export interface MoodleSyncResult {
+  assignmentsCreated: number
+  filesDownloaded:    number
+  filesSkipped:       number
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface SessionStats {
   bySubject:     SubjectStat[]

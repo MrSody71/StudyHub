@@ -1,4 +1,4 @@
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguConfig, TulguStatus, TulguSyncResult, StudySession, SessionStats, Grade, SubjectGradeStat, Note, DashboardData, Semester } from '../renderer/src/types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguConfig, TulguStatus, TulguSyncResult, StudySession, SessionStats, Grade, SubjectGradeStat, Note, DashboardData, Semester, MoodleStatus, MoodleCourse, MoodleSyncProgress, MoodleSyncResult } from '../renderer/src/types'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
 
@@ -28,7 +28,8 @@ declare global {
         completeRecurring: (id: number)                                               => Promise<IpcResult<{ task: Task; spawned: Task | null }>>
       }
       attachments: {
-        getByTask:   (taskId: number)                            => Promise<IpcResult<Attachment[]>>
+        getByTask:    (taskId: number)    => Promise<IpcResult<Attachment[]>>
+        getBySubject: (subjectId: number) => Promise<IpcResult<Attachment[]>>
         add:         (taskId: number, filePath: string)          => Promise<IpcResult<Attachment>>
         addMultiple: (taskId: number, paths: string[])           => Promise<IpcResult<{ added: Attachment[]; skipped: string[] }>>
         addFolder:   (taskId: number, src: string, name: string) => Promise<IpcResult<{ folder: Attachment; children: Attachment[] }>>
@@ -97,6 +98,17 @@ declare global {
       settings: {
         get: (key: string)                => Promise<IpcResult<string | null>>
         set: (key: string, value: string) => Promise<IpcResult<null>>
+      }
+      moodle: {
+        login:       (username: string, password: string)                          => Promise<IpcResult<{ userId: number; fullname: string }>>
+        logout:      ()                                                            => Promise<IpcResult<null>>
+        getStatus:   ()                                                            => Promise<IpcResult<MoodleStatus>>
+        getCourses:  ()                                                            => Promise<IpcResult<MoodleCourse[]>>
+        mapCourse:   (moodleCourseId: number, subjectId: number, courseName?: string) => Promise<IpcResult<null>>
+        unmapCourse: (moodleCourseId: number)                                     => Promise<IpcResult<null>>
+        syncAll:     ()                                                            => Promise<IpcResult<MoodleSyncResult>>
+        onSyncProgress:     (cb: (p: MoodleSyncProgress) => void)                 => void
+        removeAllListeners: (channel: string)                                      => void
       }
       sync: {
         upsertRow:       (table: string, row: unknown)             => Promise<IpcResult<null>>

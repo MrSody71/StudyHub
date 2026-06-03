@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import type { Tag, Theme, TulguStatus } from '../types'
+import type { Tag, Theme, TulguStatus, Subject } from '../types'
 import type { SyncStatus } from '../lib/sync'
+import MoodleSection from './MoodleSection'
 
 const TAG_COLORS = [
   '#ef4444','#f97316','#eab308','#22c55e',
@@ -11,6 +12,7 @@ const TAG_COLORS = [
 interface Props {
   theme:                Theme
   tags:                 Tag[]
+  subjects:             Subject[]
   gradeScale:           number
   appVersion:           string
   checkStatus:          'idle' | 'checking' | 'up-to-date' | 'error'
@@ -30,10 +32,11 @@ interface Props {
   onOpenAuth:           () => void
   onSignOut:            () => Promise<void>
   onManualSync:         () => void
+  onSubjectsChanged:    () => void
   onClose:              () => void
 }
 
-export default function SettingsPanel({ theme, tags, gradeScale, appVersion, checkStatus, tulguStatus, supaUser, supaConfigured, syncStatus, lastSyncAt, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onOpenTulguPanel, onSaveSupabaseConfig, onOpenAuth, onSignOut, onManualSync, onClose }: Props) {
+export default function SettingsPanel({ theme, tags, subjects, gradeScale, appVersion, checkStatus, tulguStatus, supaUser, supaConfigured, syncStatus, lastSyncAt, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onOpenTulguPanel, onSaveSupabaseConfig, onOpenAuth, onSignOut, onManualSync, onSubjectsChanged, onClose }: Props) {
   // ── Supabase config form ────────────────────────────────────────────────
   const [supaUrl,     setSupaUrl]     = useState('')
   const [supaKey,     setSupaKey]     = useState('')
@@ -370,6 +373,12 @@ export default function SettingsPanel({ theme, tags, gradeScale, appVersion, che
               )}
             </div>
           )}
+        </div>
+
+        {/* Moodle ТулГУ section */}
+        <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>
+          <div className="settings-section-title">Moodle ТулГУ</div>
+          <MoodleSection subjects={subjects} onSubjectsChanged={onSubjectsChanged} />
         </div>
 
         {/* About / updates section */}

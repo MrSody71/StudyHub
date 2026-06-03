@@ -415,6 +415,19 @@ async function attachmentsGetByTask(taskId: number): Promise<IpcResult<Attachmen
   })
 }
 
+async function attachmentsGetBySubject(subjectId: number): Promise<IpcResult<Attachment[]>> {
+  return wrap(async () => {
+    const { data, error } = await getSupabase()!
+      .from('attachments')
+      .select('*')
+      .eq('subject_id', subjectId)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    return normAll<Attachment>(data as Record<string, unknown>[])
+  })
+}
+
 /** Not available in the web version — file paths are local paths and don't apply. */
 async function attachmentsAdd(_taskId: number, _filePath: string): Promise<IpcResult<Attachment>> {
   return err('Недоступно в веб-версии — используйте кнопку загрузки файла')
@@ -1296,7 +1309,8 @@ export function buildWebApi(): Window['api'] {
       completeRecurring: tasksCompleteRecurring,
     },
     attachments: {
-      getByTask:   attachmentsGetByTask,
+      getByTask:    attachmentsGetByTask,
+      getBySubject: attachmentsGetBySubject,
       add:         attachmentsAdd,
       addMultiple: attachmentsAddMultiple,
       addFolder:   attachmentsAddFolder,
@@ -1362,6 +1376,17 @@ export function buildWebApi(): Window['api'] {
     dialog: {
       openFile:      dialogOpenFile,
       openDirectory: dialogOpenDirectory,
+    },
+    moodle: {
+      login:       (_u, _p) => Promise.resolve(err('Синхронизация с Moodle доступна только в десктоп-версии')),
+      logout:      ()       => Promise.resolve(ok(null)),
+      getStatus:   ()       => Promise.resolve(ok<import('@renderer/types').MoodleStatus>({ isLoggedIn: false, userId: null, fullname: null, lastSyncAt: null, lastError: null })),
+      getCourses:  ()       => Promise.resolve(err('Недоступно в веб-версии')),
+      mapCourse:   ()       => Promise.resolve(ok(null)),
+      unmapCourse: ()       => Promise.resolve(ok(null)),
+      syncAll:     ()       => Promise.resolve(err('Синхронизация с Moodle доступна только в десктоп-версии')),
+      onSyncProgress:     (_cb) => { /* no-op */ },
+      removeAllListeners: (_ch) => { /* no-op */ },
     },
     tulgu: {
       fetchTulsuSchedule: tulguFetchTulsuSchedule,

@@ -5,14 +5,17 @@ import fs from 'fs'
 
 export interface AttachmentRow {
   id:                   number
-  task_id:              number
+  task_id:              number | null  // null for subject-level (Moodle) attachments
+  subject_id:           number | null
   filename:             string
   filepath:             string
   size:                 number
   mime_type:            string
-  is_folder:            number        // 0 | 1
+  is_folder:            number         // 0 | 1
   parent_attachment_id: number | null
-  is_deleted:           number        // 0 | 1
+  moodle_file_url:      string | null
+  storage_path:         string | null
+  is_deleted:           number         // 0 | 1
   created_at:           string
   updated_at:           string
 }
@@ -247,4 +250,72 @@ export function openAttachment(id: number): void {
   if (row && fs.existsSync(row.filepath)) {
     shell.openPath(row.filepath)
   }
+}
+
+// ── Subject-level attachments (Moodle files) ─────────────────────────────────
+
+export function getAttachmentsBySubject(subjectId: number): AttachmentRow[] {
+  return getDb()
+    .prepare(
+      'SELECT * FROM attachments WHERE subject_id = ? AND is_deleted = 0 ORDER BY created_at DESC'
+    )
+    .all(subjectId) as AttachmentRow[]
+}
+
+/** Checks if a Moodle file (by URL) is already stored for this subject. */
+export function findAttachmentByMoodleUrl(moodleUrl: string): AttachmentRow | null {
+  return (
+    getDb()
+      .prepare(
+        'SELECT * FROM attachments WHERE moodle_file_url = ? AND is_deleted = 0 LIMIT 1'
+      )
+      .get(moodleUrl) as AttachmentRow | null
+  ) ?? null
+}
+
+/**
+ * Saves a Moodle file to disk and records it in attachments.
+ * The file is stored at userData/moodle-files/{subjectId}/{filename}.
+ * Returns null and skips if the file already exists (checked by moodle_file_url).
+ */
+export function addMoodleAttachment(
+  subjectId:     number,
+  filename:      string,
+  sourcePath:    string,   // already downloaded temp path or final path
+  size:          number,
+  mimeType:      string,
+  moodleFileUrl: string
+): AttachmentRow {
+  const db = getDb()
+
+  const dir = path.join(app.getPath('userData'), 'moodle-files', String(subjectId))
+  fs.mkdirSync(dir, { recursive: true })
+
+  const ext       = path.extname(filename)
+  const base      = path.basename(filename, ext)
+  let destName    = filename
+  let destPath    = path.join(dir, destName)
+  let suffix      = 1
+  // Avoid name collisions within the same subject folder
+  while (fs.existsSync(destPath)) {
+    destName = `${base}_${suffix}${ext}`
+    destPath = path.join(dir, destName)
+    suffix++
+  }
+
+  if (sourcePath !== destPath) {
+    fs.copyFileSync(sourcePath, destPath)
+  }
+
+  const result = db
+    .prepare(
+      `INSERT INTO attachments
+         (task_id, subject_id, filename, filepath, size, mime_type, moodle_file_url, updated_at)
+       VALUES (NULL, ?, ?, ?, ?, ?, ?, ${NOW})`
+    )
+    .run(subjectId, filename, destPath, size, mimeType, moodleFileUrl)
+
+  return db
+    .prepare('SELECT * FROM attachments WHERE id = ?')
+    .get(result.lastInsertRowid) as AttachmentRow
 }
