@@ -6,12 +6,13 @@ export interface ScheduleEntryRow {
   id:          number
   subject_id:  number | null
   title:       string
-  day_of_week: number   // 0 = Monday … 6 = Sunday
-  start_time:  string   // 'HH:MM'
-  end_time:    string   // 'HH:MM'
+  day_of_week: number        // 0 = Monday … 6 = Sunday
+  start_time:  string        // 'HH:MM'
+  end_time:    string        // 'HH:MM'
   location:    string | null
   teacher:     string | null
-  is_deleted:  number   // 0 | 1
+  entry_date:  string | null // 'YYYY-MM-DD' for date-specific, null = recurring
+  is_deleted:  number        // 0 | 1
   created_at:  string
   updated_at:  string
 }
@@ -24,6 +25,7 @@ export interface CreateScheduleEntryData {
   end_time:     string
   location?:    string | null
   teacher?:     string | null
+  entry_date?:  string | null
 }
 
 export interface UpdateScheduleEntryData {
@@ -61,8 +63,8 @@ export function createScheduleEntry(data: CreateScheduleEntryData): ScheduleEntr
   const db = getDb()
   const result = db
     .prepare(
-      `INSERT INTO schedule_entries (subject_id, title, day_of_week, start_time, end_time, location, teacher, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ${NOW})`
+      `INSERT INTO schedule_entries (subject_id, title, day_of_week, start_time, end_time, location, teacher, entry_date, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ${NOW})`
     )
     .run(
       data.subject_id ?? null,
@@ -71,7 +73,8 @@ export function createScheduleEntry(data: CreateScheduleEntryData): ScheduleEntr
       data.start_time,
       data.end_time,
       data.location ?? null,
-      data.teacher ?? null
+      data.teacher ?? null,
+      data.entry_date ?? null
     )
   return db
     .prepare('SELECT * FROM schedule_entries WHERE id = ?')
@@ -133,8 +136,8 @@ export function batchImportScheduleEntries(
       }
 
       db.prepare(
-        `INSERT INTO schedule_entries (subject_id, title, day_of_week, start_time, end_time, location, teacher, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ${NOW})`
+        `INSERT INTO schedule_entries (subject_id, title, day_of_week, start_time, end_time, location, teacher, entry_date, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ${NOW})`
       ).run(
         subject_id,
         entry.title,
@@ -142,7 +145,8 @@ export function batchImportScheduleEntries(
         entry.start_time,
         entry.end_time,
         entry.location ?? null,
-        entry.teacher ?? null
+        entry.teacher ?? null,
+        entry.date ?? null
       )
       created++
     }

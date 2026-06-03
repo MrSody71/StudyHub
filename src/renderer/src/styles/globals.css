@@ -1827,6 +1827,11 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/* Month-only nav: title centered, no arrow buttons */
+.cal-nav-month {
+  justify-content: space-between;
+}
+
 .cal-nav-title {
   font-size: 15px;
   font-weight: 700;
@@ -1834,6 +1839,24 @@ body {
   min-width: 160px;
   text-align: center;
 }
+
+.cal-nav-title-center {
+  flex: 1;
+  text-align: center;
+}
+
+/* ── Month slide animations ──────────────────────────────────────────────────── */
+@keyframes cal-from-right {
+  from { opacity: 0; transform: translateX(36px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes cal-from-left {
+  from { opacity: 0; transform: translateX(-36px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.cal-anim-from-right { animation: cal-from-right .22s ease-out both; }
+.cal-anim-from-left  { animation: cal-from-left  .22s ease-out both; }
 
 .cal-grid-wrap {
   flex: 1;

@@ -73,21 +73,23 @@ export interface ScheduleEntry {
   id:          number
   subject_id:  number | null
   title:       string
-  day_of_week: number   // 0 = Monday … 6 = Sunday
-  start_time:  string   // 'HH:MM'
-  end_time:    string   // 'HH:MM'
+  day_of_week: number        // 0 = Monday … 6 = Sunday
+  start_time:  string        // 'HH:MM'
+  end_time:    string        // 'HH:MM'
   location:    string | null
   teacher:     string | null
+  entry_date:  string | null // 'YYYY-MM-DD', null = recurring weekly
   created_at:  string
 }
 
 export interface BatchImportEntry {
   subject_name: string | null
   title:        string
-  day_of_week:  number   // 0 = Mon … 6 = Sun
-  start_time:   string   // 'HH:MM'
-  end_time:     string   // 'HH:MM'
+  day_of_week:  number        // 0 = Mon … 6 = Sun
+  start_time:   string        // 'HH:MM'
+  end_time:     string        // 'HH:MM'
   location:     string | null
+  date?:        string | null // 'YYYY-MM-DD' for date-specific imports
   teacher:      string | null
 }
 

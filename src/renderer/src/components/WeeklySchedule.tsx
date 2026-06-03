@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import type { ScheduleEntry, Subject, BatchImportEntry, BatchImportResult } from '../types'
 import TulguImportDialog from './TulguImportDialog'
 
@@ -13,13 +13,10 @@ interface Props {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DAYS_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 const DAYS_FULL  = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 const DAYS_ALL   = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 const MONTHS_RU  = ['Январь','Февраль','Март','Апрель','Май','Июнь',
                     'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
-
-type ViewMode = 'week' | 'month'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,22 +24,12 @@ function todayDow(): number {
   return (new Date().getDay() + 6) % 7
 }
 
-function weekDate(dow: number): Date {
-  const today = new Date()
-  const currentDow = (today.getDay() + 6) % 7
-  const d = new Date(today)
-  d.setDate(today.getDate() - currentDow + dow)
-  return d
-}
-
-function getTimeSlots(entries: ScheduleEntry[]): Array<{ start: string; end: string }> {
-  const seen = new Set<string>()
-  const slots: Array<{ start: string; end: string }> = []
-  for (const e of entries) {
-    const key = `${e.start_time}|${e.end_time}`
-    if (!seen.has(key)) { seen.add(key); slots.push({ start: e.start_time, end: e.end_time }) }
-  }
-  return slots.sort((a, b) => a.start.localeCompare(b.start))
+/** Format a Date as 'YYYY-MM-DD' (local timezone). */
+function toDateStr(d: Date): string {
+  const y  = d.getFullYear()
+  const m  = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dd}`
 }
 
 function lessonTypeStyle(title: string): { bg: string; accent: string } {
@@ -72,28 +59,75 @@ function sameDay(a: Date, b: Date): boolean {
          a.getDate()     === b.getDate()
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, onDelete, onBatchImport }: Props) {
-  // ── View mode ──────────────────────────────────────────────────────────────
-  const [viewMode, setViewMode] = useState<ViewMode>('week')
-
   // ── Month navigation ───────────────────────────────────────────────────────
   const [monthDate, setMonthDate] = useState<Date>(() => {
     const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d
   })
+  // Animation: 'next' = slides from right, 'prev' = slides from left, null = no anim
+  const [animDir, setAnimDir] = useState<'next' | 'prev' | null>(null)
+  const [animKey, setAnimKey] = useState(0)
   const [dayPopup, setDayPopup] = useState<{ date: Date; entries: ScheduleEntry[] } | null>(null)
 
-  function prevMonth() { setMonthDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1)) }
-  function nextMonth() { setMonthDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1)) }
-  function goToday()   {
+  // ── Swipe / wheel state ────────────────────────────────────────────────────
+  const pointerStart = useRef<{ x: number; y: number } | null>(null)
+  const wheelLocked  = useRef(false)
+
+  const navigate = useCallback((dir: 'prev' | 'next') => {
+    setMonthDate(d => dir === 'prev'
+      ? new Date(d.getFullYear(), d.getMonth() - 1, 1)
+      : new Date(d.getFullYear(), d.getMonth() + 1, 1)
+    )
+    setAnimDir(dir)
+    setAnimKey(k => k + 1)
+  }, [])
+
+  function goToday() {
     const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0)
     setMonthDate(d)
+    setAnimKey(k => k + 1)
+    setAnimDir(null)
   }
 
+  function handlePointerDown(e: React.PointerEvent) {
+    // Only track primary pointer (finger or left mouse)
+    if (e.button !== 0 && e.pointerType === 'mouse') return
+    pointerStart.current = { x: e.clientX, y: e.clientY }
+  }
+
+  function handlePointerUp(e: React.PointerEvent) {
+    if (!pointerStart.current) return
+    const dx = e.clientX - pointerStart.current.x
+    const dy = e.clientY - pointerStart.current.y
+    pointerStart.current = null
+    // Require horizontal swipe >= 50px and more horizontal than vertical
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.2) return
+    navigate(dx < 0 ? 'next' : 'prev')
+  }
+
+  function handleWheel(e: React.WheelEvent) {
+    const absDx = Math.abs(e.deltaX)
+    const absDy = Math.abs(e.deltaY)
+    // Only react to clearly horizontal scrolling
+    if (absDx < 20 || absDy > absDx * 0.8) return
+    if (wheelLocked.current) return
+    wheelLocked.current = true
+    setTimeout(() => { wheelLocked.current = false }, 450)
+    navigate(e.deltaX > 0 ? 'next' : 'prev')
+  }
+
+  // ── getDayEntries ──────────────────────────────────────────────────────────
+  // Entries with entry_date: show only on their specific date.
+  // Entries without entry_date (recurring): show on every occurrence of day_of_week.
   function getDayEntries(date: Date): ScheduleEntry[] {
-    const dow = (date.getDay() + 6) % 7
-    return entries.filter(e => e.day_of_week === dow)
+    const dateStr = toDateStr(date)
+    const dow     = (date.getDay() + 6) % 7
+    return entries.filter(e => {
+      if (e.entry_date) return e.entry_date === dateStr
+      return e.day_of_week === dow
+    })
   }
 
   function openDayPopup(date: Date) {
@@ -152,6 +186,7 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
         end_time:    formEnd,
         location:    formLocation.trim() || null,
         teacher:     formTeacher.trim() || null,
+        entry_date:  null,   // manually created entries are always recurring
       }
       if (editing) onUpdate(editing.id, data)
       else         onCreate(data)
@@ -167,12 +202,12 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
   }
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const todayIndex = todayDow()
-  const slots      = getTimeSlots(entries)
-  const today      = new Date(); today.setHours(0, 0, 0, 0)
+  const today     = new Date(); today.setHours(0, 0, 0, 0)
+  const monthGrid = buildMonthGrid(monthDate.getFullYear(), monthDate.getMonth())
 
-  // ── Month grid ─────────────────────────────────────────────────────────────
-  const monthGrid  = buildMonthGrid(monthDate.getFullYear(), monthDate.getMonth())
+  const animClass = animDir === 'next' ? 'cal-anim-from-right'
+                  : animDir === 'prev' ? 'cal-anim-from-left'
+                  : ''
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -182,17 +217,6 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
         <div className="panel-header">
           <div className="panel-title">🗓 Расписание</div>
           <div className="panel-actions">
-            {/* View toggle */}
-            <div className="sched-view-toggle">
-              <button
-                className={`sched-view-btn${viewMode === 'week' ? ' active' : ''}`}
-                onClick={() => setViewMode('week')}
-              >Неделя</button>
-              <button
-                className={`sched-view-btn${viewMode === 'month' ? ' active' : ''}`}
-                onClick={() => setViewMode('month')}
-              >Месяц</button>
-            </div>
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => setShowImport(true)}
@@ -204,180 +228,100 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
           </div>
         </div>
 
-        {/* ── Week view ───────────────────────────────────────────────────── */}
-        {viewMode === 'week' && (
-          <div className="sched-table-wrap">
-            {entries.length === 0 ? (
-              <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-                <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
-                <div style={{ fontSize: 14 }}>Расписание пусто</div>
-                <div style={{ fontSize: 12, marginTop: 6, color: 'var(--text-tertiary)' }}>
-                  Добавьте занятие вручную или импортируйте из ТулГУ
-                </div>
-              </div>
-            ) : (
-              <table className="sched-table">
-                <thead>
-                  <tr>
-                    <th className="sched-th sched-time-th">Время</th>
-                    {DAYS_SHORT.map((d, i) => {
-                      const date = weekDate(i)
-                      const isToday = i === todayIndex
+        {/* Calendar */}
+        <div className="cal-wrap">
+          {/* Navigation — centered title, no arrows, Today button */}
+          <div className="cal-nav cal-nav-month">
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={goToday}
+            >
+              Сегодня
+            </button>
+            <span className="cal-nav-title cal-nav-title-center">
+              {MONTHS_RU[monthDate.getMonth()]} {monthDate.getFullYear()}
+            </span>
+            {/* Spacer to balance the "Сегодня" button */}
+            <span style={{ minWidth: 80 }} />
+          </div>
+
+          {/* Swipeable / scrollable grid */}
+          <div
+            className="cal-grid-wrap"
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={() => { pointerStart.current = null }}
+            onPointerLeave={() => { pointerStart.current = null }}
+            onWheel={handleWheel}
+            style={{ touchAction: 'pan-y', userSelect: 'none', overflow: 'hidden' }}
+          >
+            <table key={animKey} className={`cal-table ${animClass}`}>
+              <thead>
+                <tr>
+                  {DAYS_ALL.map(d => (
+                    <th key={d} className="cal-hdr">{d}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 6 }, (_, row) => (
+                  <tr key={row}>
+                    {Array.from({ length: 7 }, (_, col) => {
+                      const date      = monthGrid[row * 7 + col]
+                      const inMonth   = date.getMonth() === monthDate.getMonth()
+                      const isToday   = sameDay(date, today)
+                      const dayEntries = getDayEntries(date)
+
                       return (
-                        <th key={i} className={`sched-th sched-day-th${isToday ? ' sched-today' : ''}`}>
-                          <span className="sched-day-name">{d}</span>
-                          <span className="sched-day-date">
-                            {date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
-                          </span>
-                          {isToday && <span className="sched-today-pill">Сегодня</span>}
-                        </th>
+                        <td
+                          key={col}
+                          className={[
+                            'cal-cell',
+                            inMonth ? '' : 'cal-other-month',
+                            isToday  ? 'cal-today' : '',
+                          ].join(' ')}
+                          onClick={() => openDayPopup(date)}
+                        >
+                          <div className="cal-date-num">{date.getDate()}</div>
+                          {dayEntries.slice(0, 3).map(entry => {
+                            const { accent } = lessonTypeStyle(entry.title)
+                            const label = entry.title.split('(')[0].trim()
+                            return (
+                              <div
+                                key={entry.id}
+                                className="cal-chip"
+                                style={{ borderLeftColor: accent, background: accent + '18' }}
+                                title={entry.title}
+                              >
+                                {label}
+                              </div>
+                            )
+                          })}
+                          {dayEntries.length > 3 && (
+                            <div className="cal-chip-more">+{dayEntries.length - 3}</div>
+                          )}
+                        </td>
                       )
                     })}
                   </tr>
-                </thead>
-                <tbody>
-                  {slots.map((slot) => (
-                    <tr key={`${slot.start}|${slot.end}`}>
-                      <td className="sched-td sched-time-td">
-                        <span className="sched-slot-start">{slot.start}</span>
-                        <span className="sched-slot-sep">–</span>
-                        <span className="sched-slot-end">{slot.end}</span>
-                      </td>
-                      {DAYS_SHORT.map((_, dow) => {
-                        const cellEntries = entries.filter(
-                          e => e.day_of_week === dow && e.start_time === slot.start && e.end_time === slot.end
-                        )
-                        const isToday = dow === todayIndex
-                        return (
-                          <td
-                            key={dow}
-                            className={`sched-td sched-cell${isToday ? ' sched-today' : ''}`}
-                            onClick={() => { if (cellEntries.length === 0) openCreate(dow, slot.start, slot.end) }}
-                            title={cellEntries.length === 0 ? 'Добавить занятие' : undefined}
-                          >
-                            {cellEntries.map((entry, idx) => {
-                              const { bg, accent } = lessonTypeStyle(entry.title)
-                              return (
-                                <div key={entry.id}>
-                                  {idx > 0 && <div className="sched-lesson-divider" />}
-                                  <div
-                                    className="sched-lesson"
-                                    style={{ background: bg, borderLeftColor: accent }}
-                                    onClick={e => { e.stopPropagation(); openEdit(entry) }}
-                                  >
-                                    <div className="sched-lesson-title">{entry.title}</div>
-                                    {entry.location && <div className="sched-lesson-meta">📍 {entry.location}</div>}
-                                    {entry.teacher  && <div className="sched-lesson-meta">👤 {entry.teacher}</div>}
-                                    <button
-                                      className="sched-lesson-del"
-                                      onClick={e => { e.stopPropagation(); handleDelete(entry) }}
-                                      title="Удалить"
-                                    >✕</button>
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                ))}
+              </tbody>
+            </table>
           </div>
-        )}
-
-        {/* ── Month view ──────────────────────────────────────────────────── */}
-        {viewMode === 'month' && (
-          <div className="cal-wrap">
-            {/* Month navigation */}
-            <div className="cal-nav">
-              <button className="btn btn-ghost btn-sm" onClick={prevMonth}>‹</button>
-              <span className="cal-nav-title">
-                {MONTHS_RU[monthDate.getMonth()]} {monthDate.getFullYear()}
-              </span>
-              <button className="btn btn-ghost btn-sm" onClick={nextMonth}>›</button>
-              <button
-                className="btn btn-secondary btn-sm"
-                style={{ marginLeft: 8 }}
-                onClick={goToday}
-              >
-                Сегодня
-              </button>
-            </div>
-
-            {/* Calendar grid */}
-            <div className="cal-grid-wrap">
-              <table className="cal-table">
-                <thead>
-                  <tr>
-                    {DAYS_ALL.map(d => (
-                      <th key={d} className="cal-hdr">{d}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Array.from({ length: 6 }, (_, row) => (
-                    <tr key={row}>
-                      {Array.from({ length: 7 }, (_, col) => {
-                        const date      = monthGrid[row * 7 + col]
-                        const inMonth   = date.getMonth() === monthDate.getMonth()
-                        const isToday   = sameDay(date, today)
-                        const dayEntries = getDayEntries(date)
-
-                        return (
-                          <td
-                            key={col}
-                            className={[
-                              'cal-cell',
-                              inMonth ? '' : 'cal-other-month',
-                              isToday  ? 'cal-today' : '',
-                            ].join(' ')}
-                            onClick={() => openDayPopup(date)}
-                          >
-                            <div className="cal-date-num">{date.getDate()}</div>
-                            {dayEntries.slice(0, 3).map(entry => {
-                              const { accent } = lessonTypeStyle(entry.title)
-                              const label = entry.title.split('(')[0].trim()
-                              return (
-                                <div
-                                  key={entry.id}
-                                  className="cal-chip"
-                                  style={{ borderLeftColor: accent, background: accent + '18' }}
-                                  onClick={e => { e.stopPropagation(); openDayPopup(date) }}
-                                  title={entry.title}
-                                >
-                                  {label}
-                                </div>
-                              )
-                            })}
-                            {dayEntries.length > 3 && (
-                              <div className="cal-chip-more">+{dayEntries.length - 3}</div>
-                            )}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
       {/* ── Day detail popup ──────────────────────────────────────────────── */}
       {dayPopup && (
         <div className="modal-overlay" onClick={() => setDayPopup(null)}>
-          <div className="modal" style={{ width: 420 }} onClick={e => e.stopPropagation()}>
+          <div className="modal" style={{ width: 440 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <span className="modal-title" style={{ textTransform: 'capitalize' }}>
                 {dayPopup.date.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}
               </span>
               <button className="btn btn-ghost btn-sm" onClick={() => setDayPopup(null)}>✕</button>
             </div>
-            <div className="modal-body" style={{ maxHeight: 420, overflowY: 'auto' }}>
+            <div className="modal-body" style={{ maxHeight: 460, overflowY: 'auto' }}>
               {dayPopup.entries.length === 0 ? (
                 <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}>Занятий нет</p>
               ) : (
@@ -395,7 +339,10 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
                             borderLeft: `3px solid ${accent}`,
                             borderRadius: 6,
                             padding: '10px 12px',
+                            cursor: 'pointer',
                           }}
+                          onClick={() => { setDayPopup(null); openEdit(entry) }}
+                          title="Нажмите для редактирования"
                         >
                           <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
                             {entry.title}

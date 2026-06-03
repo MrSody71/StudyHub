@@ -242,7 +242,6 @@ export async function fetchTulsuSchedule(groupNumber: string): Promise<BatchImpo
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  const seen    = new Set<string>()
   const entries: BatchImportEntry[] = []
 
   for (const item of data as TulsuItem[]) {
@@ -266,10 +265,9 @@ export async function fetchTulsuSchedule(groupNumber: string): Promise<BatchImpo
     const lessonType = item.KOW?.trim()   || ''
     const title      = lessonType ? `${discipline} (${lessonType})` : discipline
 
-    // Deduplicate: same slot in different weeks → one schedule_entry
-    const key = `${dow}|${startTime}|${endTime}|${title.toLowerCase()}`
-    if (seen.has(key)) continue
-    seen.add(key)
+    // Store the real date (YYYY-MM-DD) as source of truth.
+    // Each occurrence is stored as a separate entry — no deduplication.
+    const dateStr = `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`
 
     entries.push({
       subject_name: discipline,
@@ -279,12 +277,13 @@ export async function fetchTulsuSchedule(groupNumber: string): Promise<BatchImpo
       end_time:     endTime,
       location:     item.AUD?.trim()  || null,
       teacher:      item.PREP?.trim() || null,
+      date:         dateStr,
     })
   }
 
   entries.sort((a, b) =>
-    a.day_of_week !== b.day_of_week
-      ? a.day_of_week - b.day_of_week
+    (a.date ?? '') !== (b.date ?? '')
+      ? (a.date ?? '').localeCompare(b.date ?? '')
       : a.start_time.localeCompare(b.start_time)
   )
 

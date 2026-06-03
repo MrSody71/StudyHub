@@ -238,6 +238,15 @@ const migrations: Migration[] = [
 
       db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('sync.last_sync_at', '');`)
     }
+  },
+  {
+    // entry_date: stores the specific calendar date ('YYYY-MM-DD') for TulGU-
+    // imported entries. NULL = recurring weekly entry (manually created).
+    // Used by getDayEntries() to show entries only on their exact calendar date.
+    version: 13,
+    up: (db) => {
+      db.exec(`ALTER TABLE schedule_entries ADD COLUMN entry_date TEXT;`)
+    }
   }
 ]
 
