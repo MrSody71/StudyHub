@@ -1,5 +1,7 @@
 import { getDb } from './database'
 
+const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')"
+
 export interface GradeRow {
   id:         number
   subject_id: number
@@ -8,7 +10,9 @@ export interface GradeRow {
   max_value:  number
   weight:     number
   date:       string | null
+  is_deleted: number   // 0 | 1
   created_at: string
+  updated_at: string
 }
 
 export interface CreateGradeData {
@@ -38,7 +42,7 @@ export interface SubjectGradeStat {
 
 export function getGradesBySubject(subjectId: number): GradeRow[] {
   return getDb()
-    .prepare('SELECT * FROM grades WHERE subject_id = ? ORDER BY date DESC, created_at DESC')
+    .prepare('SELECT * FROM grades WHERE subject_id = ? AND is_deleted = 0 ORDER BY date DESC, created_at DESC')
     .all(subjectId) as GradeRow[]
 }
 
@@ -46,8 +50,8 @@ export function createGrade(data: CreateGradeData): GradeRow {
   const db = getDb()
   const result = db
     .prepare(
-      `INSERT INTO grades (subject_id, title, value, max_value, weight, date)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO grades (subject_id, title, value, max_value, weight, date, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ${NOW})`
     )
     .run(data.subject_id, data.title, data.value, data.max_value, data.weight, data.date ?? null)
   return db.prepare('SELECT * FROM grades WHERE id = ?').get(result.lastInsertRowid) as GradeRow
@@ -55,7 +59,7 @@ export function createGrade(data: CreateGradeData): GradeRow {
 
 export function updateGrade(id: number, data: UpdateGradeData): GradeRow {
   const db = getDb()
-  const fields: string[] = []
+  const fields: string[] = [`updated_at = ${NOW}`]
   const values: unknown[] = []
 
   if (data.title     !== undefined) { fields.push('title = ?');     values.push(data.title) }
@@ -64,25 +68,23 @@ export function updateGrade(id: number, data: UpdateGradeData): GradeRow {
   if (data.weight    !== undefined) { fields.push('weight = ?');    values.push(data.weight) }
   if (data.date      !== undefined) { fields.push('date = ?');      values.push(data.date) }
 
-  if (fields.length > 0) {
-    values.push(id)
-    db.prepare(`UPDATE grades SET ${fields.join(', ')} WHERE id = ?`).run(...values)
-  }
+  values.push(id)
+  db.prepare(`UPDATE grades SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return db.prepare('SELECT * FROM grades WHERE id = ?').get(id) as GradeRow
 }
 
 export function deleteGrade(id: number): void {
-  getDb().prepare('DELETE FROM grades WHERE id = ?').run(id)
+  getDb()
+    .prepare(`UPDATE grades SET is_deleted = 1, updated_at = ${NOW} WHERE id = ?`)
+    .run(id)
 }
 
-/** All grades across all subjects (for client-side stats like median). */
 export function getAllGrades(): GradeRow[] {
   return getDb()
-    .prepare('SELECT * FROM grades ORDER BY subject_id, date DESC, created_at DESC')
+    .prepare('SELECT * FROM grades WHERE is_deleted = 0 ORDER BY subject_id, date DESC, created_at DESC')
     .all() as GradeRow[]
 }
 
-/** Weighted average per subject (ratio 0–1), only subjects that have at least one grade. */
 export function getSubjectGradeStats(): SubjectGradeStat[] {
   return getDb().prepare(`
     SELECT
@@ -93,6 +95,7 @@ export function getSubjectGradeStats(): SubjectGradeStat[] {
       COUNT(*) AS grade_count
     FROM grades g
     JOIN subjects s ON s.id = g.subject_id
+    WHERE g.is_deleted = 0 AND s.is_deleted = 0
     GROUP BY g.subject_id
     ORDER BY s.name
   `).all() as SubjectGradeStat[]

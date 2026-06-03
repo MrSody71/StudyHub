@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Tag, Theme, TulguStatus } from '../types'
+import type { SyncStatus } from '../lib/sync'
 
 const TAG_COLORS = [
   '#ef4444','#f97316','#eab308','#22c55e',
@@ -16,6 +17,8 @@ interface Props {
   tulguStatus:          TulguStatus
   supaUser:             { email: string; id: string } | null
   supaConfigured:       boolean
+  syncStatus:           SyncStatus
+  lastSyncAt:           string | null
   onThemeChange:        (t: Theme) => void
   onGradeScaleChange:   (scale: number) => void
   onCreateTag:          (name: string, color: string) => Promise<Tag>
@@ -26,10 +29,11 @@ interface Props {
   onSaveSupabaseConfig: (url: string, key: string) => Promise<void>
   onOpenAuth:           () => void
   onSignOut:            () => Promise<void>
+  onManualSync:         () => void
   onClose:              () => void
 }
 
-export default function SettingsPanel({ theme, tags, gradeScale, appVersion, checkStatus, tulguStatus, supaUser, supaConfigured, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onOpenTulguPanel, onSaveSupabaseConfig, onOpenAuth, onSignOut, onClose }: Props) {
+export default function SettingsPanel({ theme, tags, gradeScale, appVersion, checkStatus, tulguStatus, supaUser, supaConfigured, syncStatus, lastSyncAt, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onOpenTulguPanel, onSaveSupabaseConfig, onOpenAuth, onSignOut, onManualSync, onClose }: Props) {
   // ── Supabase config form ────────────────────────────────────────────────
   const [supaUrl,     setSupaUrl]     = useState('')
   const [supaKey,     setSupaKey]     = useState('')
@@ -270,10 +274,40 @@ export default function SettingsPanel({ theme, tags, gradeScale, appVersion, che
                 <span style={{ color: 'var(--success)' }}>●</span>{' '}
                 Вы вошли как <strong style={{ color: 'var(--text-primary)' }}>{supaUser.email}</strong>
               </div>
-              <button className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}
-                onClick={() => void onSignOut()}>
-                Выйти
-              </button>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                {syncStatus === 'syncing' && (
+                  <span style={{ color: 'var(--accent)' }}>⟳ Синхронизация…</span>
+                )}
+                {syncStatus === 'error' && (
+                  <span style={{ color: 'var(--danger)' }}>⚠ Ошибка синхронизации</span>
+                )}
+                {syncStatus === 'idle' && lastSyncAt && (
+                  <>
+                    <span style={{ color: 'var(--success)' }}>✓</span>{' '}
+                    Синхронизировано:{' '}
+                    {new Date(lastSyncAt).toLocaleString('ru-RU', {
+                      day: 'numeric', month: 'short',
+                      hour: '2-digit', minute: '2-digit',
+                    })}
+                  </>
+                )}
+                {syncStatus === 'idle' && !lastSyncAt && (
+                  <span>Синхронизация ещё не выполнялась</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={onManualSync}
+                  disabled={syncStatus === 'syncing'}
+                >
+                  {syncStatus === 'syncing' ? 'Синхронизация…' : '↻ Синхронизировать'}
+                </button>
+                <button className="btn btn-ghost btn-sm"
+                  onClick={() => void onSignOut()}>
+                  Выйти
+                </button>
+              </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -216,6 +216,28 @@ const migrations: Migration[] = [
     up: (db) => {
       db.exec(`ALTER TABLE schedule_entries ADD COLUMN teacher TEXT;`)
     }
+  },
+  {
+    // Adds updated_at (UTC ISO-8601) and is_deleted (soft-delete) to all sync-able
+    // tables. notes already has updated_at — only is_deleted is added there.
+    version: 12,
+    up: (db) => {
+      // Use a static string default so ALTER TABLE works on all SQLite versions,
+      // then immediately UPDATE rows so they get a real current timestamp.
+      const tables = [
+        'semesters', 'subjects', 'tasks', 'subtasks', 'tags',
+        'attachments', 'grades', 'study_sessions', 'schedule_entries',
+      ]
+      for (const t of tables) {
+        db.exec(`ALTER TABLE ${t} ADD COLUMN updated_at TEXT NOT NULL DEFAULT '2020-01-01T00:00:00.000Z';`)
+        db.exec(`ALTER TABLE ${t} ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0,1));`)
+        db.exec(`UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now');`)
+      }
+      // notes already has updated_at — only add is_deleted
+      db.exec(`ALTER TABLE notes ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0,1));`)
+
+      db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('sync.last_sync_at', '');`)
+    }
   }
 ]
 

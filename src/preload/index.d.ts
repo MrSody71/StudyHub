@@ -98,6 +98,11 @@ declare global {
         get: (key: string)                => Promise<IpcResult<string | null>>
         set: (key: string, value: string) => Promise<IpcResult<null>>
       }
+      sync: {
+        upsertRow:       (table: string, row: unknown)             => Promise<IpcResult<null>>
+        getLocalChanges: (since: string | null)                    => Promise<IpcResult<Record<string, unknown[]>>>
+        replaceTaskTags: (taskId: number, tagIds: number[])        => Promise<IpcResult<null>>
+      }
       dialog: {
         openFile:      () => Promise<IpcResult<string[] | null>>
         openDirectory: () => Promise<IpcResult<string | null>>

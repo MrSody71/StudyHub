@@ -2,6 +2,7 @@ import { ipcMain, dialog, BrowserWindow, Notification } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { getAllSubjects, createSubject, updateSubject, deleteSubject, archiveSubject } from '../db/subjects'
+import { upsertRowFromRemote, getLocalChangesSince, replaceTaskTagsFromRemote } from '../db/sync'
 import { getAllSemesters, createSemester, updateSemester, deleteSemester, setActiveSemester } from '../db/semesters'
 import { getTasksBySubject, getAllTasksWithDeadline, createTask, updateTask, deleteTask, completeTaskAndSpawnNext } from '../db/tasks'
 import {
@@ -189,6 +190,17 @@ export function setupIpcHandlers(): void {
   // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', (_e, key: string) => wrap(() => getSetting(key)))
   ipcMain.handle('settings:set', (_e, key: string, value: string) => wrap(() => { setSetting(key, value); return null }))
+
+  // ── Sync ──────────────────────────────────────────────────────────────────
+  ipcMain.handle('sync:upsertRow', (_e, table: string, row: Record<string, unknown>) =>
+    wrap(() => { upsertRowFromRemote(table, row); return null })
+  )
+  ipcMain.handle('sync:getLocalChanges', (_e, since: string | null) =>
+    wrap(() => getLocalChangesSince(since || null))
+  )
+  ipcMain.handle('sync:replaceTaskTags', (_e, taskId: number, tagIds: number[]) =>
+    wrap(() => { replaceTaskTagsFromRemote(taskId, tagIds); return null })
+  )
 
   // ── File dialog ───────────────────────────────────────────────────────────
   ipcMain.handle('dialog:openFile', async (event) => {

@@ -14,8 +14,10 @@ import PomodoroTimer from './components/PomodoroTimer'
 import StudyStats from './components/StudyStats'
 import SettingsPanel from './components/SettingsPanel'
 import AuthScreen from './components/AuthScreen'
+import CloudStatus from './components/CloudStatus'
 import { usePomodoro } from './hooks/usePomodoro'
 import { initSupabase, getSupabase, clearSupabase } from './lib/supabase'
+import { pushRow, pushDelete, pushTaskTags, pullAll, uploadLocalData, runSync, type SyncStatus } from './lib/sync'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
 type AppView    = 'dashboard' | 'tasks' | 'schedule' | 'calendar' | 'timer'
@@ -66,6 +68,10 @@ export default function App() {
   const [showAuthScreen,   setShowAuthScreen]   = useState(false)
   const [showUploadDialog, setShowUploadDialog] = useState(false)
   const [supaConfigured,   setSupaConfigured]   = useState(false)
+
+  // ── Sync state ───────────────────────────────────────────────────────────
+  const [syncStatus,  setSyncStatus]  = useState<SyncStatus>('idle')
+  const [lastSyncAt,  setLastSyncAt]  = useState<string | null>(null)
 
   // ── Auto-updater state ───────────────────────────────────────────────────
   type UpdateStage = 'available' | 'downloading' | 'downloaded'
@@ -289,12 +295,14 @@ export default function App() {
     const s = await unwrap(window.api.subjects.create(data))
     setSubjects((prev) => [...prev, s].sort((a, b) => a.name.localeCompare(b.name)))
     setSelectedSubjectId(s.id)
+    if (supaUser) pushRow('subjects', s as Record<string, unknown>, supaUser.id)
   }
 
   async function handleUpdateSubject(id: number, data: Partial<Omit<Subject, 'id' | 'created_at'>>) {
     const s = await unwrap(window.api.subjects.update(id, data))
     setSubjects((prev) => prev.map((x) => x.id === id ? s : x).sort((a, b) => a.name.localeCompare(b.name)))
     setArchivedSubjects((prev) => prev.map((x) => x.id === id ? s : x).sort((a, b) => a.name.localeCompare(b.name)))
+    if (supaUser) pushRow('subjects', s as Record<string, unknown>, supaUser.id)
   }
 
   async function handleDeleteSubject(id: number) {
@@ -302,6 +310,7 @@ export default function App() {
     await unwrap(window.api.subjects.delete(id))
     setSubjects((prev) => prev.filter((s) => s.id !== id))
     if (selectedSubjectId === id) setSelectedSubjectId(null)
+    if (supaUser) pushDelete('subjects', id, supaUser.id)
   }
 
   async function handleArchiveSubject(id: number, archive: boolean) {
@@ -314,31 +323,36 @@ export default function App() {
       setArchivedSubjects((prev) => prev.filter((x) => x.id !== id))
       setSubjects((prev) => [...prev, s].sort((a, b) => a.name.localeCompare(b.name)))
     }
+    if (supaUser) pushRow('subjects', s as Record<string, unknown>, supaUser.id)
   }
 
   // ── Semester handlers ────────────────────────────────────────────────────
   async function handleCreateSemester(data: { name: string; start_date?: string | null; end_date?: string | null }) {
     const s = await unwrap(window.api.semesters.create(data))
     setSemesters((prev) => [s, ...prev])
+    if (supaUser) pushRow('semesters', s as Record<string, unknown>, supaUser.id)
   }
 
   async function handleUpdateSemester(id: number, data: { name?: string; start_date?: string | null; end_date?: string | null }) {
     const s = await unwrap(window.api.semesters.update(id, data))
     setSemesters((prev) => prev.map((x) => x.id === id ? s : x))
+    if (supaUser) pushRow('semesters', s as Record<string, unknown>, supaUser.id)
   }
 
   async function handleDeleteSemester(id: number) {
     await unwrap(window.api.semesters.delete(id))
     setSemesters((prev) => prev.filter((s) => s.id !== id))
-    // Reload subjects — their semester_id may now be NULL
     void loadSubjects()
     void loadArchivedSubjects()
+    if (supaUser) pushDelete('semesters', id, supaUser.id)
   }
 
   async function handleSetActiveSemester(id: number | null) {
     await unwrap(window.api.semesters.setActive(id))
     setSemesters((prev) => prev.map((s) => ({ ...s, is_active: s.id === id ? 1 : 0 })))
     setDashRefreshKey((k) => k + 1)
+    // setActive updates all semesters — trigger a full sync instead of pushing each
+    if (supaUser) void handleManualSync()
   }
 
   // ── Task handlers ────────────────────────────────────────────────────────
@@ -347,12 +361,14 @@ export default function App() {
     setTasks((prev) => [t, ...prev])
     setSelectedTaskId(t.id)
     setDashRefreshKey((k) => k + 1)
+    if (supaUser) pushRow('tasks', t as Record<string, unknown>, supaUser.id)
   }
 
   async function handleUpdateTask(id: number, data: Partial<Omit<Task, 'id' | 'created_at' | 'subject_id'>>) {
     const t = await unwrap(window.api.tasks.update(id, data))
     setTasks((prev) => prev.map((x) => x.id === id ? { ...x, ...t } : x))
     setDashRefreshKey((k) => k + 1)
+    if (supaUser) pushRow('tasks', t as Record<string, unknown>, supaUser.id)
   }
 
   async function handleDeleteTask(id: number) {
@@ -361,6 +377,7 @@ export default function App() {
     setTasks((prev) => prev.filter((t) => t.id !== id))
     if (selectedTaskId === id) setSelectedTaskId(null)
     setDashRefreshKey((k) => k + 1)
+    if (supaUser) pushDelete('tasks', id, supaUser.id)
   }
 
   async function handleCompleteRecurring(id: number) {
@@ -370,6 +387,10 @@ export default function App() {
       return result.spawned ? [result.spawned, ...updated] : updated
     })
     setDashRefreshKey((k) => k + 1)
+    if (supaUser) {
+      pushRow('tasks', result.task as Record<string, unknown>, supaUser.id)
+      if (result.spawned) pushRow('tasks', result.spawned as Record<string, unknown>, supaUser.id)
+    }
   }
 
   // Navigate from calendar to a specific task
@@ -439,6 +460,7 @@ export default function App() {
     const s = await unwrap(window.api.subtasks.create(taskId, title))
     setSubtasks((prev) => [...prev, s])
     if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
+    if (supaUser) pushRow('subtasks', s as Record<string, unknown>, supaUser.id)
   }
 
   async function handleUpdateSubtask(id: number, data: { title?: string; is_done?: boolean }) {
@@ -447,12 +469,14 @@ export default function App() {
     if (data.is_done !== undefined && selectedSubjectId !== null) {
       await loadTasks(selectedSubjectId)
     }
+    if (supaUser) pushRow('subtasks', s as Record<string, unknown>, supaUser.id)
   }
 
   async function handleDeleteSubtask(id: number) {
     await unwrap(window.api.subtasks.delete(id))
     setSubtasks((prev) => prev.filter((s) => s.id !== id))
     if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
+    if (supaUser) pushDelete('subtasks', id, supaUser.id)
   }
 
   async function handleReorderSubtasks(taskId: number, orderedIds: number[]) {
@@ -464,6 +488,7 @@ export default function App() {
   async function handleCreateTag(name: string, color: string): Promise<Tag> {
     const tag = await unwrap(window.api.tags.create(name, color))
     setTags((prev) => [...prev, tag])
+    if (supaUser) pushRow('tags', tag as Record<string, unknown>, supaUser.id)
     return tag
   }
 
@@ -471,35 +496,43 @@ export default function App() {
     const tag = await unwrap(window.api.tags.update(id, data))
     setTags((prev) => prev.map((t) => t.id === id ? tag : t))
     if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
+    if (supaUser) pushRow('tags', tag as Record<string, unknown>, supaUser.id)
   }
 
   async function handleDeleteTag(id: number) {
     await unwrap(window.api.tags.delete(id))
     setTags((prev) => prev.filter((t) => t.id !== id))
     if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
+    if (supaUser) pushDelete('tags', id, supaUser.id)
   }
 
   async function handleSetTaskTags(taskId: number, tagIds: number[]) {
     await unwrap(window.api.tags.setTaskTags(taskId, tagIds))
     if (selectedSubjectId !== null) await loadTasks(selectedSubjectId)
+    if (supaUser) pushTaskTags(taskId, tagIds, supaUser.id)
   }
 
   // ── Note handlers ────────────────────────────────────────────────────────
   async function handleCreateNote(subjectId: number, title: string): Promise<Note> {
     const note = await unwrap(window.api.notes.create(subjectId, title))
     setNotes((prev) => [note, ...prev])
+    if (supaUser) pushRow('notes', note as Record<string, unknown>, supaUser.id)
     return note
   }
 
   function handleUpdateNote(id: number, data: { title?: string; content?: string }) {
     window.api.notes.update(id, data).then((r) => {
-      if (r.success) setNotes((prev) => prev.map((n) => n.id === id ? r.data : n))
+      if (r.success) {
+        setNotes((prev) => prev.map((n) => n.id === id ? r.data : n))
+        if (supaUser) pushRow('notes', r.data as Record<string, unknown>, supaUser.id)
+      }
     }).catch(() => {/* non-fatal */})
   }
 
   async function handleDeleteNote(id: number) {
     await unwrap(window.api.notes.delete(id))
     setNotes((prev) => prev.filter((n) => n.id !== id))
+    if (supaUser) pushDelete('notes', id, supaUser.id)
   }
 
   // ── Grade handlers ───────────────────────────────────────────────────────
@@ -508,6 +541,7 @@ export default function App() {
     setGrades((prev) => [g, ...prev])
     setAllGrades((prev) => [g, ...prev])
     void loadGradeStats()
+    if (supaUser) pushRow('grades', g as Record<string, unknown>, supaUser.id)
   }
 
   async function handleUpdateGrade(id: number, data: Partial<Omit<Grade, 'id' | 'created_at' | 'subject_id'>>) {
@@ -515,6 +549,7 @@ export default function App() {
     setGrades((prev) => prev.map((x) => x.id === id ? g : x))
     setAllGrades((prev) => prev.map((x) => x.id === id ? g : x))
     void loadGradeStats()
+    if (supaUser) pushRow('grades', g as Record<string, unknown>, supaUser.id)
   }
 
   async function handleDeleteGrade(id: number) {
@@ -522,6 +557,7 @@ export default function App() {
     setGrades((prev) => prev.filter((g) => g.id !== id))
     setAllGrades((prev) => prev.filter((g) => g.id !== id))
     void loadGradeStats()
+    if (supaUser) pushDelete('grades', id, supaUser.id)
   }
 
   async function handleGradeScaleChange(scale: number) {
@@ -535,6 +571,7 @@ export default function App() {
     setScheduleEntries((prev) => [...prev, entry].sort((a, b) =>
       a.day_of_week !== b.day_of_week ? a.day_of_week - b.day_of_week : a.start_time.localeCompare(b.start_time)
     ))
+    if (supaUser) pushRow('schedule_entries', entry as Record<string, unknown>, supaUser.id)
   }
 
   async function handleUpdateScheduleEntry(id: number, data: Partial<Omit<ScheduleEntry, 'id' | 'created_at'>>) {
@@ -542,11 +579,13 @@ export default function App() {
     setScheduleEntries((prev) => prev.map((e) => e.id === id ? entry : e).sort((a, b) =>
       a.day_of_week !== b.day_of_week ? a.day_of_week - b.day_of_week : a.start_time.localeCompare(b.start_time)
     ))
+    if (supaUser) pushRow('schedule_entries', entry as Record<string, unknown>, supaUser.id)
   }
 
   async function handleDeleteScheduleEntry(id: number) {
     await unwrap(window.api.schedule.delete(id))
     setScheduleEntries((prev) => prev.filter((e) => e.id !== id))
+    if (supaUser) pushDelete('schedule_entries', id, supaUser.id)
   }
 
   async function handleBatchImport(entries: BatchImportEntry[], replace: boolean): Promise<BatchImportResult> {
@@ -581,8 +620,10 @@ export default function App() {
       const sb = initSupabase(url, key)
       const { data: { session } } = await sb.auth.getSession()
       if (session?.user) {
-        setSupaUser({ email: session.user.email!, id: session.user.id })
+        const user = { email: session.user.email!, id: session.user.id }
+        setSupaUser(user)
         setAuthStatus('authenticated')
+        void startupSync(user.id)
         return
       }
     } catch {
@@ -606,15 +647,29 @@ export default function App() {
     if (!sb) throw new Error('Supabase не настроен')
     const { data, error } = await sb.auth.signInWithPassword({ email, password })
     if (error) throw error
-    setSupaUser({ email: data.user.email!, id: data.user.id })
+    const user = { email: data.user.email!, id: data.user.id }
+    setSupaUser(user)
     setAuthStatus('authenticated')
     setShowAuthScreen(false)
-    // Offer upload if user had local data
     const skipR = await window.api.settings.get('auth_skip')
-    if (skipR.success && skipR.data === '1' && subjects.length > 0) {
-      setShowUploadDialog(true)
-    }
+    const hadLocalData = skipR.success && skipR.data === '1' && subjects.length > 0
     await window.api.settings.set('auth_skip', '0')
+    if (hadLocalData) {
+      // Upload all local data first, then pull remote
+      setShowUploadDialog(true)
+      setSyncStatus('syncing')
+      try {
+        await uploadLocalData(user.id)
+        const now = new Date().toISOString()
+        await window.api.settings.set('sync.last_sync_at', now)
+        setLastSyncAt(now)
+        setSyncStatus('idle')
+      } catch {
+        setSyncStatus('error')
+      }
+    } else {
+      void startupSync(user.id)
+    }
   }
 
   async function handleSignUp(email: string, password: string) {
@@ -653,6 +708,49 @@ export default function App() {
       initSupabase(url.trim(), key.trim())
     } else {
       clearSupabase()
+    }
+  }
+
+  // ── Sync helpers ─────────────────────────────────────────────────────────
+
+  async function startupSync(userId: string) {
+    const lastR = await window.api.settings.get('sync.last_sync_at')
+    const since = (lastR.success && lastR.data) ? lastR.data : null
+    setLastSyncAt(since)
+    setSyncStatus('syncing')
+    try {
+      const now = await runSync(userId, since)
+      setLastSyncAt(now)
+      setSyncStatus('idle')
+      // Reload all data after pull
+      void loadSubjects()
+      void loadArchivedSubjects()
+      void loadSemesters()
+      void loadTags()
+      void loadScheduleEntries()
+      void loadGradeStats()
+      void loadAllGrades()
+    } catch {
+      setSyncStatus('error')
+    }
+  }
+
+  async function handleManualSync() {
+    if (!supaUser || syncStatus === 'syncing') return
+    setSyncStatus('syncing')
+    try {
+      const now = await runSync(supaUser.id, lastSyncAt)
+      setLastSyncAt(now)
+      setSyncStatus('idle')
+      void loadSubjects()
+      void loadArchivedSubjects()
+      void loadSemesters()
+      void loadTags()
+      void loadScheduleEntries()
+      void loadGradeStats()
+      void loadAllGrades()
+    } catch {
+      setSyncStatus('error')
     }
   }
 
@@ -837,6 +935,13 @@ export default function App() {
               </div>
             ) : null
           })()}
+          {supaUser && (
+            <CloudStatus
+              status={syncStatus}
+              lastSyncAt={lastSyncAt}
+              onClick={() => void handleManualSync()}
+            />
+          )}
           <button className="settings-btn" onClick={() => setShowSettings(true)}>⚙ Настройки</button>
         </div>
       </div>
@@ -1002,6 +1107,8 @@ export default function App() {
           tulguStatus={tulguStatus}
           supaUser={supaUser}
           supaConfigured={supaConfigured}
+          syncStatus={syncStatus}
+          lastSyncAt={lastSyncAt}
           onThemeChange={handleThemeChange}
           onGradeScaleChange={handleGradeScaleChange}
           onCreateTag={handleCreateTag}
@@ -1012,6 +1119,7 @@ export default function App() {
           onSaveSupabaseConfig={handleSaveSupabaseConfig}
           onOpenAuth={() => { setShowSettings(false); setShowAuthScreen(true) }}
           onSignOut={handleSignOut}
+          onManualSync={() => void handleManualSync()}
           onClose={() => setShowSettings(false)}
         />
       )}
@@ -1027,23 +1135,34 @@ export default function App() {
 
       {/* ── Upload local data dialog ───────────────────────────────────────── */}
       {showUploadDialog && (
-        <div className="modal-overlay" onClick={() => setShowUploadDialog(false)}>
+        <div className="modal-overlay">
           <div className="modal" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">Загрузить локальные данные?</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowUploadDialog(false)}>✕</button>
+              <span className="modal-title">Загрузка локальных данных</span>
             </div>
             <div className="modal-body">
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
-                Вы вошли в аккаунт. На этом устройстве есть локальные данные (предметы, задания).
-                Синхронизация с облаком появится в будущих версиях.
-              </p>
+              {syncStatus === 'syncing' ? (
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+                  Загружаем локальные данные в облако…
+                </p>
+              ) : syncStatus === 'error' ? (
+                <p style={{ fontSize: 14, color: 'var(--danger)', margin: 0, lineHeight: 1.6 }}>
+                  Не удалось загрузить данные. Проверьте подключение к интернету и попробуйте ещё раз через кнопку синхронизации.
+                </p>
+              ) : (
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+                  <span style={{ color: 'var(--success)' }}>✓</span>{' '}
+                  Локальные данные успешно загружены в облако.
+                </p>
+              )}
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-primary" onClick={() => setShowUploadDialog(false)}>
-                Понятно
-              </button>
-            </div>
+            {syncStatus !== 'syncing' && (
+              <div className="modal-footer">
+                <button className="btn btn-primary" onClick={() => setShowUploadDialog(false)}>
+                  Готово
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

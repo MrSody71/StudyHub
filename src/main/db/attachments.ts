@@ -12,7 +12,9 @@ export interface AttachmentRow {
   mime_type:            string
   is_folder:            number        // 0 | 1
   parent_attachment_id: number | null
+  is_deleted:           number        // 0 | 1
   created_at:           string
+  updated_at:           string
 }
 
 function getMimeType(filename: string): string {
@@ -47,7 +49,7 @@ function getMimeType(filename: string): string {
 
 export function getAttachmentsByTask(taskId: number): AttachmentRow[] {
   return getDb()
-    .prepare('SELECT * FROM attachments WHERE task_id = ? ORDER BY created_at DESC')
+    .prepare('SELECT * FROM attachments WHERE task_id = ? AND is_deleted = 0 ORDER BY created_at DESC')
     .all(taskId) as AttachmentRow[]
 }
 
@@ -69,8 +71,8 @@ export function addAttachment(taskId: number, sourcePath: string): AttachmentRow
 
   const result = db
     .prepare(
-      `INSERT INTO attachments (task_id, filename, filepath, size, mime_type)
-       VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO attachments (task_id, filename, filepath, size, mime_type, updated_at)
+       VALUES (?, ?, ?, ?, ?, ${NOW})`
     )
     .run(taskId, filename, destPath, stat.size, mimeType)
 
@@ -78,6 +80,8 @@ export function addAttachment(taskId: number, sourcePath: string): AttachmentRow
     .prepare('SELECT * FROM attachments WHERE id = ?')
     .get(result.lastInsertRowid) as AttachmentRow
 }
+
+const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')"
 
 export function deleteAttachment(id: number): void {
   const db = getDb()
@@ -87,9 +91,10 @@ export function deleteAttachment(id: number): void {
 
   if (!row) return
 
+  // Physically delete the file/folder from disk — the file is no longer needed.
+  // The DB row is soft-deleted so the deletion propagates via sync.
   try {
     if (row.is_folder) {
-      // Delete the stored directory and all its contents
       if (fs.existsSync(row.filepath)) {
         fs.rmSync(row.filepath, { recursive: true, force: true })
       }
@@ -100,11 +105,11 @@ export function deleteAttachment(id: number): void {
     console.error('[Attachments] Failed to delete file/folder:', err)
   }
 
-  // Explicitly delete children first (belt-and-suspenders for older SQLite)
+  // Soft-delete children then the parent
   if (row.is_folder) {
-    db.prepare('DELETE FROM attachments WHERE parent_attachment_id = ?').run(id)
+    db.prepare(`UPDATE attachments SET is_deleted = 1, updated_at = ${NOW} WHERE parent_attachment_id = ?`).run(id)
   }
-  db.prepare('DELETE FROM attachments WHERE id = ?').run(id)
+  db.prepare(`UPDATE attachments SET is_deleted = 1, updated_at = ${NOW} WHERE id = ?`).run(id)
 }
 
 export interface AddMultipleResult {
@@ -205,8 +210,8 @@ export function addFolder(
   const insertAll = db.transaction((): AddFolderResult => {
     const folderRun = db
       .prepare(
-        `INSERT INTO attachments (task_id, filename, filepath, size, mime_type, is_folder)
-         VALUES (?, ?, ?, ?, 'inode/directory', 1)`
+        `INSERT INTO attachments (task_id, filename, filepath, size, mime_type, is_folder, updated_at)
+         VALUES (?, ?, ?, ?, 'inode/directory', 1, ${NOW})`
       )
       .run(taskId, displayName, destDir, totalSize)
     const folderId = Number(folderRun.lastInsertRowid)
@@ -214,8 +219,8 @@ export function addFolder(
     for (const { rel, destPath, size, mime } of copied) {
       db.prepare(
         `INSERT INTO attachments
-           (task_id, filename, filepath, size, mime_type, is_folder, parent_attachment_id)
-         VALUES (?, ?, ?, ?, ?, 0, ?)`
+           (task_id, filename, filepath, size, mime_type, is_folder, parent_attachment_id, updated_at)
+         VALUES (?, ?, ?, ?, ?, 0, ?, ${NOW})`
       ).run(taskId, rel, destPath, size, mime, folderId)
     }
 

@@ -1,5 +1,7 @@
 import { getDb } from './database'
 
+const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')"
+
 export interface ScheduleEntryRow {
   id:          number
   subject_id:  number | null
@@ -9,7 +11,9 @@ export interface ScheduleEntryRow {
   end_time:    string   // 'HH:MM'
   location:    string | null
   teacher:     string | null
+  is_deleted:  number   // 0 | 1
   created_at:  string
+  updated_at:  string
 }
 
 export interface CreateScheduleEntryData {
@@ -49,7 +53,7 @@ export interface BatchImportResult {
 
 export function getAllScheduleEntries(): ScheduleEntryRow[] {
   return getDb()
-    .prepare('SELECT * FROM schedule_entries ORDER BY day_of_week, start_time')
+    .prepare('SELECT * FROM schedule_entries WHERE is_deleted = 0 ORDER BY day_of_week, start_time')
     .all() as ScheduleEntryRow[]
 }
 
@@ -57,8 +61,8 @@ export function createScheduleEntry(data: CreateScheduleEntryData): ScheduleEntr
   const db = getDb()
   const result = db
     .prepare(
-      `INSERT INTO schedule_entries (subject_id, title, day_of_week, start_time, end_time, location, teacher)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO schedule_entries (subject_id, title, day_of_week, start_time, end_time, location, teacher, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ${NOW})`
     )
     .run(
       data.subject_id ?? null,
@@ -76,7 +80,7 @@ export function createScheduleEntry(data: CreateScheduleEntryData): ScheduleEntr
 
 export function updateScheduleEntry(id: number, data: UpdateScheduleEntryData): ScheduleEntryRow {
   const db = getDb()
-  const fields: string[] = []
+  const fields: string[] = [`updated_at = ${NOW}`]
   const values: unknown[] = []
 
   if (data.subject_id  !== undefined) { fields.push('subject_id = ?');  values.push(data.subject_id) }
@@ -87,10 +91,8 @@ export function updateScheduleEntry(id: number, data: UpdateScheduleEntryData): 
   if (data.location    !== undefined) { fields.push('location = ?');    values.push(data.location) }
   if (data.teacher     !== undefined) { fields.push('teacher = ?');     values.push(data.teacher) }
 
-  if (fields.length > 0) {
-    values.push(id)
-    db.prepare(`UPDATE schedule_entries SET ${fields.join(', ')} WHERE id = ?`).run(...values)
-  }
+  values.push(id)
+  db.prepare(`UPDATE schedule_entries SET ${fields.join(', ')} WHERE id = ?`).run(...values)
 
   return db
     .prepare('SELECT * FROM schedule_entries WHERE id = ?')
@@ -98,7 +100,9 @@ export function updateScheduleEntry(id: number, data: UpdateScheduleEntryData): 
 }
 
 export function deleteScheduleEntry(id: number): void {
-  getDb().prepare('DELETE FROM schedule_entries WHERE id = ?').run(id)
+  getDb()
+    .prepare(`UPDATE schedule_entries SET is_deleted = 1, updated_at = ${NOW} WHERE id = ?`)
+    .run(id)
 }
 
 export function batchImportScheduleEntries(
@@ -108,12 +112,12 @@ export function batchImportScheduleEntries(
   const db = getDb()
 
   if (replace) {
-    db.prepare('DELETE FROM schedule_entries').run()
+    // Soft-delete all existing entries so the delete propagates via sync
+    db.prepare(`UPDATE schedule_entries SET is_deleted = 1, updated_at = ${NOW}`).run()
   }
 
-  // Match entries to existing subjects by name — never auto-create subjects
   const existingSubjects = db
-    .prepare('SELECT id, name FROM subjects WHERE is_archived = 0')
+    .prepare('SELECT id, name FROM subjects WHERE is_archived = 0 AND is_deleted = 0')
     .all() as { id: number; name: string }[]
 
   const subjectMap = new Map(existingSubjects.map((s) => [s.name.toLowerCase().trim(), s.id]))
@@ -126,12 +130,11 @@ export function batchImportScheduleEntries(
       if (entry.subject_name) {
         const key = entry.subject_name.toLowerCase().trim()
         if (subjectMap.has(key)) subject_id = subjectMap.get(key)!
-        // Not found → leave subject_id = null (no auto-creation)
       }
 
       db.prepare(
-        `INSERT INTO schedule_entries (subject_id, title, day_of_week, start_time, end_time, location, teacher)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO schedule_entries (subject_id, title, day_of_week, start_time, end_time, location, teacher, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ${NOW})`
       ).run(
         subject_id,
         entry.title,

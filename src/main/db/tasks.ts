@@ -1,5 +1,7 @@
 import { getDb } from './database'
 
+const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')"
+
 interface TagInTask {
   id:    number
   name:  string
@@ -15,6 +17,7 @@ export interface TaskRow {
   priority:              'low' | 'medium' | 'high'
   due_date:              string | null
   created_at:            string
+  updated_at:            string
   subtask_total:         number
   subtask_done:          number
   tags:                  TagInTask[]
@@ -51,6 +54,7 @@ interface RawRow {
   priority:             'low' | 'medium' | 'high'
   due_date:             string | null
   created_at:           string
+  updated_at:           string
   subtask_total:        number
   subtask_done:         number
   tags_json:            string
@@ -67,7 +71,7 @@ const WITH_COUNTS_SQL = `
   FROM tasks t
   LEFT JOIN (
     SELECT task_id, COUNT(*) AS total, SUM(is_done) AS done
-    FROM subtasks GROUP BY task_id
+    FROM subtasks WHERE is_deleted = 0 GROUP BY task_id
   ) sub ON sub.task_id = t.id
   LEFT JOIN (
     SELECT tt.task_id,
@@ -76,6 +80,7 @@ const WITH_COUNTS_SQL = `
       ) AS tags_json
     FROM task_tags tt
     JOIN tags tg ON tg.id = tt.tag_id
+    WHERE tg.is_deleted = 0
     GROUP BY tt.task_id
   ) tag_agg ON tag_agg.task_id = t.id
 `
@@ -87,7 +92,7 @@ function parseRaw(row: RawRow): TaskRow {
 
 export function getTasksBySubject(subjectId: number): TaskRow[] {
   const rows = getDb()
-    .prepare(`${WITH_COUNTS_SQL} WHERE t.subject_id = ? ORDER BY t.created_at DESC`)
+    .prepare(`${WITH_COUNTS_SQL} WHERE t.subject_id = ? AND t.is_deleted = 0 ORDER BY t.created_at DESC`)
     .all(subjectId) as RawRow[]
   return rows.map(parseRaw)
 }
@@ -96,8 +101,8 @@ export function createTask(data: CreateTaskData): TaskRow {
   const db = getDb()
   const result = db
     .prepare(
-      `INSERT INTO tasks (subject_id, title, description, status, priority, due_date, recurrence_rule, recurrence_parent_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO tasks (subject_id, title, description, status, priority, due_date, recurrence_rule, recurrence_parent_id, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ${NOW})`
     )
     .run(
       data.subject_id,
@@ -117,7 +122,7 @@ export function createTask(data: CreateTaskData): TaskRow {
 
 export function updateTask(id: number, data: UpdateTaskData): TaskRow {
   const db = getDb()
-  const fields: string[] = []
+  const fields: string[] = [`updated_at = ${NOW}`]
   const values: unknown[] = []
 
   if (data.title !== undefined)            { fields.push('title = ?');            values.push(data.title) }
@@ -127,22 +132,22 @@ export function updateTask(id: number, data: UpdateTaskData): TaskRow {
   if (data.due_date !== undefined)         { fields.push('due_date = ?');         values.push(data.due_date) }
   if (data.recurrence_rule !== undefined)  { fields.push('recurrence_rule = ?');  values.push(data.recurrence_rule) }
 
-  if (fields.length > 0) {
-    values.push(id)
-    db.prepare(`UPDATE tasks SET ${fields.join(', ')} WHERE id = ?`).run(...values)
-  }
+  values.push(id)
+  db.prepare(`UPDATE tasks SET ${fields.join(', ')} WHERE id = ?`).run(...values)
 
   const raw = db.prepare(`${WITH_COUNTS_SQL} WHERE t.id = ?`).get(id) as RawRow
   return parseRaw(raw)
 }
 
 export function deleteTask(id: number): void {
-  getDb().prepare('DELETE FROM tasks WHERE id = ?').run(id)
+  getDb()
+    .prepare(`UPDATE tasks SET is_deleted = 1, updated_at = ${NOW} WHERE id = ?`)
+    .run(id)
 }
 
 export function getAllTasksWithDeadline(): TaskRow[] {
   const rows = getDb()
-    .prepare(`${WITH_COUNTS_SQL} WHERE t.due_date IS NOT NULL ORDER BY t.due_date ASC`)
+    .prepare(`${WITH_COUNTS_SQL} WHERE t.due_date IS NOT NULL AND t.is_deleted = 0 ORDER BY t.due_date ASC`)
     .all() as RawRow[]
   return rows.map(parseRaw)
 }
@@ -168,7 +173,7 @@ export function completeTaskAndSpawnNext(
   if (!raw) throw new Error(`Task ${id} not found`)
 
   // Mark as done
-  db.prepare('UPDATE tasks SET status = ? WHERE id = ?').run('done', id)
+  db.prepare(`UPDATE tasks SET status = ?, updated_at = ${NOW} WHERE id = ?`).run('done', id)
   const updatedRaw = db.prepare(`${WITH_COUNTS_SQL} WHERE t.id = ?`).get(id) as RawRow
   const task = parseRaw(updatedRaw)
 
@@ -178,8 +183,8 @@ export function completeTaskAndSpawnNext(
   const newDueDate = shiftDate(raw.due_date, rule.unit, rule.interval)
 
   const ins = db.prepare(
-    `INSERT INTO tasks (subject_id, title, description, status, priority, due_date, recurrence_rule, recurrence_parent_id)
-     VALUES (?, ?, ?, 'not_started', ?, ?, ?, ?)`
+    `INSERT INTO tasks (subject_id, title, description, status, priority, due_date, recurrence_rule, recurrence_parent_id, updated_at)
+     VALUES (?, ?, ?, 'not_started', ?, ?, ?, ?, ${NOW})`
   )
 
   const copyTags = db.transaction(() => {
