@@ -16,8 +16,8 @@
     "build:win": "node scripts/generate-icon.js && electron-vite build && node scripts/build.js nsis",
     "build:portable": "node scripts/generate-icon.js && electron-vite build && node scripts/build.js portable",
     "release": "node scripts/generate-icon.js && electron-vite build && electron-builder --win nsis --x64 --publish always",
-    "dev:web": "vite --config web/vite.config.ts",
-    "build:web": "vite build --config web/vite.config.ts",
+    "dev:web": "cd web && npm install && npm run dev",
+    "build:web": "cd web && npm install && npm run build",
     "setup": "npm install --ignore-scripts && node node_modules/electron/install.js && npx electron-builder install-app-deps",
     "postinstall": "electron-builder install-app-deps"
   },
