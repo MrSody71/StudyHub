@@ -4,6 +4,9 @@ let _client: SupabaseClient | null = null
 
 /** Initialise (or re-initialise) the Supabase client. */
 export function initSupabase(url: string, anonKey: string): SupabaseClient {
+  if (import.meta.env.DEV) {
+    console.log('[Supabase] init — URL:', url || '(empty)', '| key:', anonKey ? anonKey.slice(0, 20) + '…' : '(empty)')
+  }
   _client = createClient(url, anonKey, {
     auth: {
       persistSession: true,

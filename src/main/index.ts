@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, protocol } from 'electron'
+import { app, BrowserWindow, shell, protocol, session } from 'electron'
 import path from 'path'
 import { initDatabase, closeDatabase } from './db/database'
 import { setupIpcHandlers } from './ipc/handlers'
@@ -58,7 +58,29 @@ function createWindow(): void {
   }
 }
 
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "font-src 'self' data:",
+  // Allow outbound fetch/WebSocket to Supabase, Moodle and TulGU
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://moodle.tulsu.ru https://tulsu.ru https://corsproxy.io",
+].join('; ')
+
 app.whenReady().then(() => {
+  // Override CSP at the session level so it applies in both dev and packaged builds.
+  // This is more reliable than the <meta> tag alone, which some Electron versions ignore
+  // for locally-loaded files.
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [CSP],
+      },
+    })
+  })
+
   initDatabase()
   setupIpcHandlers()
   setupAttachmentProtocol()
