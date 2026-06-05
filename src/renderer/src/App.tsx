@@ -959,11 +959,9 @@ export default function App() {
               <span className="pom-running-badge" />
             )}
           </button>
-          {isAdmin && (
-            <button className={`view-nav-btn${view === 'wallet' ? ' active' : ''}`} onClick={() => setView('wallet')}>
-              <span className="view-nav-icon">💳</span> Кошелёк
-            </button>
-          )}
+          <button className={`view-nav-btn${view === 'wallet' ? ' active' : ''}`} onClick={() => setView('wallet')}>
+            <span className="view-nav-icon">💳</span> Кошелёк
+          </button>
 
         </div>
 
@@ -1203,26 +1201,9 @@ export default function App() {
 
       {/* ── Wallet view ───────────────────────────────────────────────────── */}
       {view === 'wallet' && (
-        isAdmin ? (
-          <div className="full-content-panel">
-            <WalletView />
-          </div>
-        ) : (
-          <div className="full-content-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 14 }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
-              <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Доступ запрещён</div>
-              <div style={{ fontSize: 13 }}>Этот раздел доступен только администраторам.</div>
-              <button
-                className="btn btn-ghost btn-sm"
-                style={{ marginTop: 16 }}
-                onClick={() => setView('dashboard')}
-              >
-                На дашборд
-              </button>
-            </div>
-          </div>
-        )
+        <div className="full-content-panel">
+          <WalletView />
+        </div>
       )}
 
       {showSettings && (

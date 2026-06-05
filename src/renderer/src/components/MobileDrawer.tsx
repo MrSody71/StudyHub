@@ -10,18 +10,18 @@ interface Props {
   onClose:    () => void
 }
 
-const BASE_NAV_ITEMS: { view: AppView; icon: string; label: string; adminOnly?: boolean }[] = [
+const NAV_ITEMS: { view: AppView; icon: string; label: string }[] = [
   { view: 'dashboard', icon: '🏠', label: 'Дашборд'    },
   { view: 'subjects',  icon: '📚', label: 'Предметы'   },
   { view: 'tasks',     icon: '📋', label: 'Задания'     },
   { view: 'schedule',  icon: '🗓', label: 'Расписание'  },
   { view: 'calendar',  icon: '📅', label: 'Календарь'   },
   { view: 'timer',     icon: '⏱', label: 'Таймер'      },
-  { view: 'wallet',    icon: '💳', label: 'Кошелёк',     adminOnly: true },
+  { view: 'wallet',    icon: '💳', label: 'Кошелёк'     },
 ]
 
-export default function MobileDrawer({ open, view, pomRunning, isAdmin, onNavigate, onSettings, onClose }: Props) {
-  const navItems = BASE_NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin)
+export default function MobileDrawer({ open, view, pomRunning, isAdmin: _isAdmin, onNavigate, onSettings, onClose }: Props) {
+  const navItems = NAV_ITEMS
   return (
     <>
       {/* Backdrop — darkens the rest of the screen */}
