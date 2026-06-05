@@ -49,13 +49,13 @@ function normAll<T>(rows: Record<string, unknown>[]): T[] {
 }
 
 /** Returns the authenticated user's id, throwing if not signed in. */
-function uid(): string {
+async function uid(): Promise<string> {
   const sb = getSupabase()
   if (!sb) throw new Error('Supabase не инициализирован')
-  // The session is synchronously available via _client.auth.currentUser in v2
-  const user = (sb as unknown as { auth: { currentUser: { id: string } | null } }).auth.currentUser
-  if (!user) throw new Error('Не авторизован')
-  return user.id
+  const { data: { session }, error } = await sb.auth.getSession()
+  if (error) throw error
+  if (!session) throw new Error('Не авторизован')
+  return session.user.id
 }
 
 /** Pending File objects stored during dialog.openFile() — keyed by fake path. */
@@ -81,7 +81,7 @@ function settingsSet(key: string, value: string): void {
 async function subjectsGetAll(filter?: { archived?: boolean; semesterId?: number }): Promise<IpcResult<Subject[]>> {
   return wrap(async () => {
     const sb = getSupabase()!
-    const userId = uid()
+    const userId = await uid()
     let q = sb.from('subjects').select('*').eq('user_id', userId).eq('is_deleted', false)
     if (filter?.archived !== undefined) q = q.eq('is_archived', filter.archived)
     if (filter?.semesterId !== undefined) q = q.eq('semester_id', filter.semesterId)
@@ -93,7 +93,7 @@ async function subjectsGetAll(filter?: { archived?: boolean; semesterId?: number
 
 async function subjectsCreate(data: { name: string; color: string; description?: string | null; semester_id?: number | null }): Promise<IpcResult<Subject>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const { data: row, error } = await getSupabase()!
       .from('subjects')
       .insert({ ...data, user_id: userId })
@@ -145,7 +145,7 @@ async function subjectsArchive(id: number, archive: boolean): Promise<IpcResult<
 
 async function semestersGetAll(): Promise<IpcResult<Semester[]>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const { data, error } = await getSupabase()!
       .from('semesters')
       .select('*')
@@ -159,7 +159,7 @@ async function semestersGetAll(): Promise<IpcResult<Semester[]>> {
 
 async function semestersCreate(data: { name: string; start_date?: string | null; end_date?: string | null }): Promise<IpcResult<Semester>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const { data: row, error } = await getSupabase()!
       .from('semesters')
       .insert({ ...data, user_id: userId })
@@ -196,7 +196,7 @@ async function semestersDelete(id: number): Promise<IpcResult<null>> {
 
 async function semestersSetActive(id: number | null): Promise<IpcResult<null>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const sb = getSupabase()!
     // Clear all active flags for this user
     await sb.from('semesters')
@@ -270,7 +270,7 @@ async function tasksGetBySubject(subjectId: number): Promise<IpcResult<Task[]>> 
 
 async function tasksGetAllWithDeadline(): Promise<IpcResult<Task[]>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const { data, error } = await getSupabase()!
       .from('tasks')
       .select('*, subjects!inner(user_id)')
@@ -443,7 +443,7 @@ async function attachmentsAddMultiple(
   paths: string[]
 ): Promise<IpcResult<{ added: Attachment[]; skipped: string[] }>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const sb = getSupabase()!
     const added: Attachment[] = []
     const skipped: string[] = []
@@ -618,7 +618,7 @@ async function subtasksReorder(taskId: number, orderedIds: number[]): Promise<Ip
 
 async function tagsGetAll(): Promise<IpcResult<Tag[]>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const { data, error } = await getSupabase()!
       .from('tags')
       .select('*')
@@ -632,7 +632,7 @@ async function tagsGetAll(): Promise<IpcResult<Tag[]>> {
 
 async function tagsCreate(name: string, color: string): Promise<IpcResult<Tag>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const { data: row, error } = await getSupabase()!
       .from('tags')
       .insert({ name, color, user_id: userId, updated_at: new Date().toISOString() })
@@ -686,17 +686,16 @@ async function tagsSetTaskTags(taskId: number, tagIds: number[]): Promise<IpcRes
 
 async function scheduleGetAll(): Promise<IpcResult<ScheduleEntry[]>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const { data, error } = await getSupabase()!
       .from('schedule_entries')
-      .select('*, subjects!left(user_id)')
-      .or(`subject_id.is.null,subjects.user_id.eq.${userId}`)
+      .select('*')
+      .eq('user_id', userId)
       .eq('is_deleted', false)
       .order('day_of_week')
       .order('start_time')
     if (error) throw error
-    const cleaned = (data as Record<string, unknown>[]).map(({ subjects: _s, ...rest }) => rest)
-    return normAll<ScheduleEntry>(cleaned)
+    return normAll<ScheduleEntry>(data as Record<string, unknown>[])
   })
 }
 
@@ -738,7 +737,7 @@ async function scheduleDelete(id: number): Promise<IpcResult<null>> {
 
 async function scheduleBatchImport(entries: BatchImportEntry[], replace: boolean): Promise<IpcResult<BatchImportResult>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const sb = getSupabase()!
 
     if (replace) {
@@ -838,7 +837,7 @@ async function notesDelete(id: number): Promise<IpcResult<null>> {
 
 async function notesSearch(query: string): Promise<IpcResult<Note[]>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const { data, error } = await getSupabase()!
       .from('notes')
       .select('*, subjects!inner(user_id)')
@@ -869,7 +868,7 @@ async function gradesGetBySubject(subjectId: number): Promise<IpcResult<Grade[]>
 
 async function gradesGetAll(): Promise<IpcResult<Grade[]>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const { data, error } = await getSupabase()!
       .from('grades')
       .select('*, subjects!inner(user_id)')
@@ -920,7 +919,7 @@ async function gradesDelete(id: number): Promise<IpcResult<null>> {
 
 async function gradesGetSubjectStats(): Promise<IpcResult<SubjectGradeStat[]>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const { data, error } = await getSupabase()!
       .from('grades')
       .select('subject_id, value, max_value, weight, subjects!inner(name, color, user_id)')
@@ -965,7 +964,7 @@ async function gradesGetSubjectStats(): Promise<IpcResult<SubjectGradeStat[]>> {
 
 async function sessionsCreate(data: Omit<StudySession, 'id' | 'created_at'>): Promise<IpcResult<StudySession>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const { data: row, error } = await getSupabase()!
       .from('study_sessions')
       .insert({ ...data, user_id: userId, updated_at: new Date().toISOString() })
@@ -978,7 +977,7 @@ async function sessionsCreate(data: Omit<StudySession, 'id' | 'created_at'>): Pr
 
 async function sessionsGetStats(): Promise<IpcResult<SessionStats>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const { data, error } = await getSupabase()!
       .from('study_sessions')
       .select('*, subjects(name, color)')
@@ -1035,7 +1034,7 @@ async function sessionsGetStats(): Promise<IpcResult<SessionStats>> {
 
 async function dashboardGetData(semesterId?: number | null): Promise<IpcResult<DashboardData>> {
   return wrap(async () => {
-    const userId = uid()
+    const userId = await uid()
     const sb = getSupabase()!
 
     // Fetch tasks and subjects in parallel
@@ -1274,16 +1273,19 @@ function syncGetLocalChanges(_since: string | null) {
 function syncReplaceTaskTags(_taskId: number, _tagIds: number[]) {
   return Promise.resolve(ok(null))
 }
+function syncGetAllTaskTags() {
+  return Promise.resolve(ok([] as { task_id: number; tag_id: number }[]))
+}
 
 // ── Build the full window.api object ─────────────────────────────────────────
 
 export function buildWebApi(): Window['api'] {
-  // Eagerly initialise Supabase from env vars if available — App.tsx will also
-  // call initSupabase via initAuth(), but doing it here ensures any early API
-  // call (before auth check completes) still has a client.
+  // Eagerly initialise Supabase from env vars only if not already initialised.
+  // App.tsx will also call initSupabase via initAuth(); initialising twice with
+  // the same key creates a "Multiple GoTrueClient instances" warning.
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
   const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
-  if (supabaseUrl && supabaseKey) initSupabase(supabaseUrl, supabaseKey)
+  if (supabaseUrl && supabaseKey && !getSupabase()) initSupabase(supabaseUrl, supabaseKey)
 
   return {
     subjects: {
@@ -1372,6 +1374,7 @@ export function buildWebApi(): Window['api'] {
       upsertRow:       syncUpsertRow,
       getLocalChanges: syncGetLocalChanges,
       replaceTaskTags: syncReplaceTaskTags,
+      getAllTaskTags:   syncGetAllTaskTags,
     },
     dialog: {
       openFile:      dialogOpenFile,

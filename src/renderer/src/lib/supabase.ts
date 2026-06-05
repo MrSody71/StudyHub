@@ -1,9 +1,14 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 let _client: SupabaseClient | null = null
+let _initUrl: string | null = null
+let _initKey: string | null = null
 
-/** Initialise (or re-initialise) the Supabase client. */
+/** Initialise (or re-initialise) the Supabase client.
+ *  Returns the existing client if called again with the same URL + key. */
 export function initSupabase(url: string, anonKey: string): SupabaseClient {
+  if (_client && _initUrl === url && _initKey === anonKey) return _client
+
   const urlOk  = url     ? url.slice(0, 30)     + '…' : '(empty)'
   const keyOk  = anonKey ? anonKey.slice(0, 20) + '…' : '(empty)'
   console.log('[Supabase] init — URL:', urlOk, '| key:', keyOk)
@@ -12,6 +17,8 @@ export function initSupabase(url: string, anonKey: string): SupabaseClient {
     console.error('[Supabase] init failed: URL or key is missing')
   }
 
+  _initUrl = url
+  _initKey = anonKey
   _client = createClient(url, anonKey, {
     auth: {
       persistSession: true,
@@ -30,6 +37,8 @@ export function getSupabase(): SupabaseClient | null {
 /** Clears the client (e.g. after removing config). */
 export function clearSupabase(): void {
   _client = null
+  _initUrl = null
+  _initKey = null
 }
 
 /**

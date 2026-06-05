@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguStatus, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort } from './types'
 import Dashboard from './components/Dashboard'
+import BottomNav from './components/BottomNav'
 import SubjectList from './components/SubjectList'
 import SemesterManager from './components/SemesterManager'
 import TaskList from './components/TaskList'
@@ -25,7 +26,7 @@ type SubjectTab = 'tasks' | 'grades' | 'notes'
 
 async function unwrap<T>(p: Promise<IpcResult<T>>): Promise<T> {
   const r = await p
-  if (!r.success) throw new Error(r.error)
+  if (!r.success) throw Object.assign(new Error(r.error), { isAuthError: r.error?.includes('авторизован') })
   return r.data
 }
 
@@ -213,17 +214,17 @@ export default function App() {
 
   async function loadSubjects() {
     try { setSubjects(await unwrap(window.api.subjects.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadArchivedSubjects() {
     try { setArchivedSubjects(await unwrap(window.api.subjects.getAll({ archived: true }))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadSemesters() {
     try { setSemesters(await unwrap(window.api.semesters.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadTasks(subjectId: number) {
@@ -236,42 +237,42 @@ export default function App() {
         autoSelectTaskRef.current = null
         if (loaded.some((t) => t.id === id)) setSelectedTaskId(id)
       }
-    } catch (e) { setError(String(e)) }
+    } catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadAllDeadlineTasks() {
     try { setAllDeadlineTasks(await unwrap(window.api.tasks.getAllWithDeadline())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadTags() {
     try { setTags(await unwrap(window.api.tags.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadScheduleEntries() {
     try { setScheduleEntries(await unwrap(window.api.schedule.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadGrades(subjectId: number) {
     try { setGrades(await unwrap(window.api.grades.getBySubject(subjectId))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadGradeStats() {
     try { setGradeStats(await unwrap(window.api.grades.getSubjectStats())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadAllGrades() {
     try { setAllGrades(await unwrap(window.api.grades.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadNotes(subjectId: number) {
     try { setNotes(await unwrap(window.api.notes.getBySubject(subjectId))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadGradeScale() {
@@ -297,12 +298,12 @@ export default function App() {
 
   async function loadAttachments(taskId: number) {
     try { setAttachments(await unwrap(window.api.attachments.getByTask(taskId))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadSubtasks(taskId: number) {
     try { setSubtasks(await unwrap(window.api.subtasks.getByTask(taskId))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   // ── Subject handlers ─────────────────────────────────────────────────────
@@ -867,6 +868,25 @@ export default function App() {
         </div>
       )}
 
+      {/* ── Mobile top bar (hidden on desktop) ────────────────────────────── */}
+      <div className="mobile-top-bar">
+        <span style={{ fontSize: 18 }}>📚</span>
+        <span className="mobile-top-bar-title">StudyHub</span>
+        <div className="mobile-top-bar-actions">
+          {supaUser && (
+            <CloudStatus
+              status={syncStatus}
+              lastSyncAt={lastSyncAt}
+              onClick={() => void handleManualSync()}
+            />
+          )}
+          <button
+            style={{ background: 'none', border: 'none', color: 'var(--text-sidebar)', fontSize: 18, cursor: 'pointer', padding: '4px 6px', minHeight: 44, display: 'flex', alignItems: 'center' }}
+            onClick={() => setShowSettings(true)}
+          >⚙</button>
+        </div>
+      </div>
+
       <div className="sidebar">
         <div className="sidebar-header">
           <span className="app-logo">📚</span>
@@ -1054,6 +1074,9 @@ export default function App() {
 
           {selectedTask && (
             <div className="detail-panel">
+              <button className="mobile-back-btn" onClick={() => setSelectedTaskId(null)}>
+                ← Назад к заданиям
+              </button>
               <TaskDetail
                 task={selectedTask}
                 attachments={attachments}
@@ -1213,6 +1236,13 @@ export default function App() {
           onClose={() => setShowSemesterMgr(false)}
         />
       )}
+
+      {/* ── Bottom navigation (mobile only) ───────────────────────────────── */}
+      <BottomNav
+        view={view}
+        onViewChange={(v) => { setView(v); setSelectedTaskId(null) }}
+        pomRunning={pomState.status === 'running'}
+      />
     </div>
   )
 }
