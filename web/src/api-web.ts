@@ -689,14 +689,13 @@ async function scheduleGetAll(): Promise<IpcResult<ScheduleEntry[]>> {
     const userId = await uid()
     const { data, error } = await getSupabase()!
       .from('schedule_entries')
-      .select('*, subjects!left(user_id)')
-      .or(`subject_id.is.null,subjects.user_id.eq.${userId}`)
+      .select('*')
+      .eq('user_id', userId)
       .eq('is_deleted', false)
       .order('day_of_week')
       .order('start_time')
     if (error) throw error
-    const cleaned = (data as Record<string, unknown>[]).map(({ subjects: _s, ...rest }) => rest)
-    return normAll<ScheduleEntry>(cleaned)
+    return normAll<ScheduleEntry>(data as Record<string, unknown>[])
   })
 }
 
