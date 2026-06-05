@@ -15,6 +15,7 @@ import PomodoroTimer from './components/PomodoroTimer'
 import StudyStats from './components/StudyStats'
 import SettingsPanel from './components/SettingsPanel'
 import WalletView from './components/WalletView'
+import LoadingScreen from './components/LoadingScreen'
 import AuthScreen from './components/AuthScreen'
 import CloudStatus from './components/CloudStatus'
 import { usePomodoro } from './hooks/usePomodoro'
@@ -822,8 +823,12 @@ export default function App() {
     await window.api.updater.downloadUpdate()
   }
 
+  const authLoading = authStatus === 'init'
+
   return (
-    <AuthContext.Provider value={{ userProfile }}>
+    <AuthContext.Provider value={{ userProfile, loading: authLoading }}>
+    {/* Loading overlay — covers everything while session is being checked */}
+    <LoadingScreen visible={authLoading} />
     <div className="app">
       {/* ── Update modal ───────────────────────────────────────────────────── */}
       {showUpdateModal && updateVersion && (
@@ -896,8 +901,8 @@ export default function App() {
         </div>
       )}
 
-      {error && (
-        <div style={{ position:'fixed', top:10, right:10, background:'var(--danger)', color:'#fff', padding:'10px 16px', borderRadius:8, zIndex:9999, fontSize:13 }}>
+      {error && !authLoading && (
+        <div style={{ position:'fixed', top:10, right:10, background:'var(--danger)', color:'#fff', padding:'10px 16px', borderRadius:8, zIndex:9998, fontSize:13 }}>
           {error}
           <button onClick={() => setError(null)} style={{ marginLeft:10, background:'none', border:'none', color:'#fff', cursor:'pointer', fontSize:16 }}>×</button>
         </div>
@@ -920,6 +925,7 @@ export default function App() {
            : view === 'tasks'    ? (selectedSubject ? selectedSubject.name : 'Задания')
            : view === 'schedule' ? 'Расписание'
            : view === 'calendar' ? 'Календарь'
+           : view === 'wallet'   ? 'Кошелёк'
            : 'Таймер'}
         </span>
         <div className="mobile-top-bar-actions">

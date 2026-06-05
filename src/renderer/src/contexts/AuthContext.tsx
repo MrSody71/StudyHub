@@ -12,11 +12,13 @@ export interface UserProfile {
 interface AuthContextValue {
   /** Null until user is authenticated and profile has been loaded */
   userProfile: UserProfile | null
+  /** True while the initial Supabase session check is in progress */
+  loading: boolean
 }
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
-export const AuthContext = createContext<AuthContextValue>({ userProfile: null })
+export const AuthContext = createContext<AuthContextValue>({ userProfile: null, loading: true })
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
