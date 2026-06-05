@@ -212,49 +212,101 @@ export async function pullAll(
   }
 }
 
+// ── pushAll ──────────────────────────────────────────────────────────────────
+
+/**
+ * Push ALL local rows from every sync table + task_tags to Supabase.
+ * Always sends the full local state — no timestamp filter.
+ * Called at the start of every runSync and after the initial login upload.
+ */
+export async function pushAll(userId: string): Promise<void> {
+  const sb = getSupabase()
+  if (!sb || !navigator.onLine) {
+    console.warn('[sync] pushAll пропущен: нет Supabase клиента или нет сети')
+    return
+  }
+
+  console.log('[sync] pushAll start userId=', userId)
+
+  // ── Main tables ──
+  const r = await window.api.sync.getLocalChanges(null)
+  if (!r.success) {
+    console.error('[sync] pushAll: getLocalChanges failed', r.error)
+    return
+  }
+
+  for (const [table, rows] of Object.entries(r.data)) {
+    const arr = rows as Record<string, unknown>[]
+    if (!arr || arr.length === 0) {
+      console.log(`[sync] push [${table}]: 0 строк`)
+      continue
+    }
+    const batch = arr.map((row) => ({ ...normalizeRow(row), user_id: userId }))
+    console.log(`[sync] push [${table}]: ${batch.length} строк`)
+    try {
+      const { error } = await sb
+        .from(table)
+        .upsert(batch as Record<string, unknown>[], { onConflict: 'user_id,id' })
+      if (error) {
+        console.error(`[sync] push error [${table}]:`, error.message,
+          '| code:', error.code, '| details:', error.details, '| hint:', error.hint)
+      } else {
+        console.log(`[sync] push OK [${table}]`)
+      }
+    } catch (e) {
+      console.error(`[sync] push exception [${table}]:`, e)
+    }
+  }
+
+  // ── task_tags ──
+  try {
+    const ttR = await window.api.sync.getAllTaskTags()
+    if (!ttR.success) {
+      console.error('[sync] pushAll: getAllTaskTags failed', ttR.error)
+    } else {
+      const ttRows = ttR.data
+      if (ttRows && ttRows.length > 0) {
+        const now = new Date().toISOString()
+        const batch = ttRows.map(({ task_id, tag_id }) => ({
+          task_id, tag_id, user_id: userId,
+          created_at: now, updated_at: now,
+        }))
+        console.log(`[sync] push [task_tags]: ${batch.length} строк`)
+        const { error } = await sb
+          .from('task_tags')
+          .upsert(batch, { onConflict: 'user_id,task_id,tag_id' })
+        if (error) {
+          console.error('[sync] push error [task_tags]:', error.message,
+            '| code:', error.code, '| details:', error.details, '| hint:', error.hint)
+        } else {
+          console.log('[sync] push OK [task_tags]')
+        }
+      } else {
+        console.log('[sync] push [task_tags]: 0 строк')
+      }
+    }
+  } catch (e) {
+    console.error('[sync] push task_tags exception:', e)
+  }
+
+  console.log('[sync] pushAll done')
+}
+
 // ── Initial upload ───────────────────────────────────────────────────────────
 
+/** Push all local data to Supabase — used when a user logs in after having worked locally. */
 export async function uploadLocalData(userId: string): Promise<void> {
-  const sb = getSupabase()
-  if (!sb) return
-
   // ── Session check ──
   const activeId = await getActiveUserId()
   if (!activeId) {
     console.error('[sync] uploadLocalData пропущен: нет активной сессии')
     return
   }
-
   console.log('[sync] uploadLocalData start, userId=', userId)
-
-  const r = await window.api.sync.getLocalChanges(null)
-  if (!r.success) {
-    console.error('[sync] uploadLocalData: getLocalChanges failed', r.error)
-    return
-  }
-
-  for (const [table, rows] of Object.entries(r.data)) {
-    if (!rows || (rows as unknown[]).length === 0) continue
-    const batch = (rows as Record<string, unknown>[]).map((row) => ({
-      ...normalizeRow(row),
-      user_id: userId,
-    }))
-    console.log(`[sync] upload [${table}]: ${batch.length} строк`)
-    try {
-      const { error } = await sb.from(table).upsert(batch, { onConflict: 'user_id,id' })
-      if (error) {
-        console.error(`[sync] upload error [${table}]:`, error.message,
-          '| code:', error.code, '| details:', error.details, '| hint:', error.hint)
-      } else {
-        console.log(`[sync] upload OK [${table}]`)
-      }
-    } catch (e) {
-      console.error(`[sync] upload exception [${table}]:`, e)
-    }
-  }
+  await pushAll(userId)
 }
 
-// ── Full sync (push local changes + pull remote changes) ─────────────────────
+// ── Full sync (push local → pull remote) ─────────────────────────────────────
 
 export async function runSync(
   userId: string,
@@ -269,40 +321,10 @@ export async function runSync(
     throw new Error('Нет активной сессии Supabase. Войдите в аккаунт.')
   }
 
-  // 1. Push local changes that happened since lastSyncAt
-  const changesR = await window.api.sync.getLocalChanges(lastSyncAt)
-  if (changesR.success) {
-    const sb = getSupabase()
-    if (sb && navigator.onLine) {
-      for (const [table, rows] of Object.entries(changesR.data)) {
-        if (!rows || (rows as unknown[]).length === 0) continue
-        const batch = (rows as Record<string, unknown>[]).map((row) => ({
-          ...normalizeRow(row),
-          user_id: userId,
-        }))
-        console.log(`[sync] push [${table}]: ${batch.length} строк`)
-        try {
-          const { error } = await sb
-            .from(table)
-            .upsert(batch as Record<string, unknown>[], { onConflict: 'user_id,id' })
-          if (error) {
-            console.error(`[sync] push error [${table}]:`, error.message,
-              '| code:', error.code, '| details:', error.details, '| hint:', error.hint)
-          } else {
-            console.log(`[sync] push OK [${table}]`)
-          }
-        } catch (e) {
-          console.error(`[sync] push exception [${table}]:`, e)
-        }
-      }
-    } else {
-      console.warn('[sync] push пропущен: нет Supabase клиента или нет сети')
-    }
-  } else {
-    console.error('[sync] getLocalChanges failed:', changesR.error)
-  }
+  // 1. Push all local data to Supabase
+  await pushAll(userId)
 
-  // 2. Pull remote changes
+  // 2. Pull remote changes (incremental if lastSyncAt is set, full otherwise)
   await pullAll(userId, lastSyncAt)
 
   const now = new Date().toISOString()

@@ -106,9 +106,10 @@ const api = {
     set: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value)
   },
   sync: {
-    upsertRow:        (table: string, row: unknown)              => ipcRenderer.invoke('sync:upsertRow', table, row),
-    getLocalChanges:  (since: string | null)                     => ipcRenderer.invoke('sync:getLocalChanges', since),
-    replaceTaskTags:  (taskId: number, tagIds: number[])         => ipcRenderer.invoke('sync:replaceTaskTags', taskId, tagIds),
+    upsertRow:       (table: string, row: unknown)              => ipcRenderer.invoke('sync:upsertRow', table, row),
+    getLocalChanges: (since: string | null)                     => ipcRenderer.invoke('sync:getLocalChanges', since),
+    replaceTaskTags: (taskId: number, tagIds: number[])         => ipcRenderer.invoke('sync:replaceTaskTags', taskId, tagIds),
+    getAllTaskTags:   ()                                         => ipcRenderer.invoke('sync:getAllTaskTags'),
   },
   dialog: {
     openFile:      () => ipcRenderer.invoke('dialog:openFile'),
