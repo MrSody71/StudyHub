@@ -9,7 +9,6 @@ import TaskDetail from './components/TaskDetail'
 import GradeList from './components/GradeList'
 import NoteList from './components/NoteList'
 import WeeklySchedule from './components/WeeklySchedule'
-import TulguPanel from './components/TulguPanel'
 import MonthCalendar from './components/MonthCalendar'
 import PomodoroTimer from './components/PomodoroTimer'
 import StudyStats from './components/StudyStats'
@@ -53,7 +52,6 @@ export default function App() {
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
   const [selectedTaskId, setSelectedTaskId]       = useState<number | null>(null)
   const [showSettings, setShowSettings]     = useState(false)
-  const [showTulguPanel, setShowTulguPanel] = useState(false)
   const [tulguStatus, setTulguStatus]       = useState<TulguStatus>({
     isSyncing: false, lastUpdated: null, lastError: null, lastErrorAt: null
   })
@@ -914,29 +912,6 @@ export default function App() {
             )}
           </button>
 
-          {/* Separator */}
-          <div style={{ height: 1, background: 'rgba(255,255,255,.07)', margin: '4px 0' }} />
-
-          <button
-            className={`view-nav-btn${showTulguPanel ? ' active' : ''}`}
-            onClick={() => setShowTulguPanel(true)}
-            title={
-              tulguStatus.lastError
-                ? `Ошибка синхронизации${tulguStatus.lastUpdated ? ` · Обновлено: ${new Date(tulguStatus.lastUpdated).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}`
-                : tulguStatus.lastUpdated
-                ? `Обновлено: ${new Date(tulguStatus.lastUpdated).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
-                : 'Импорт расписания ТулГУ'
-            }
-          >
-            <span className="view-nav-icon">🏫</span>
-            <span>ТулГУ</span>
-            {tulguStatus.isSyncing && (
-              <span className="tulgu-sync-badge">⟳</span>
-            )}
-            {!tulguStatus.isSyncing && tulguStatus.lastError && (
-              <span className="tulgu-warn-badge">⚠</span>
-            )}
-          </button>
         </div>
 
         <SubjectList
@@ -1162,7 +1137,7 @@ export default function App() {
           onUpdateTag={handleUpdateTag}
           onDeleteTag={handleDeleteTag}
           onCheckForUpdates={handleCheckForUpdates}
-          onOpenTulguPanel={() => { setShowSettings(false); setShowTulguPanel(true) }}
+          onScheduleRefresh={() => { void loadScheduleEntries(); void loadSubjects() }}
           onSaveSupabaseConfig={handleSaveSupabaseConfig}
           onOpenAuth={() => { setShowSettings(false); setShowAuthScreen(true) }}
           onSignOut={handleSignOut}
@@ -1213,17 +1188,6 @@ export default function App() {
             )}
           </div>
         </div>
-      )}
-
-      {showTulguPanel && (
-        <TulguPanel
-          status={tulguStatus}
-          onClose={() => setShowTulguPanel(false)}
-          onScheduleRefresh={() => {
-            void loadScheduleEntries()
-            void loadSubjects()
-          }}
-        />
       )}
 
       {showSemesterMgr && (
