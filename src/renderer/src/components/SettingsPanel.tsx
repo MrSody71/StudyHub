@@ -1,6 +1,8 @@
-import { useState } from 'react'
-import type { Tag, Theme, TulguStatus, Subject } from '../types'
+import { useState, useEffect } from 'react'
+import type { Tag, Theme, TulguConfig, TulguStatus, ScheduleDiff, Subject } from '../types'
 import type { SyncStatus } from '../lib/sync'
+import { useRole } from '../hooks/useRole'
+import AdminPanel from './AdminPanel'
 import MoodleSection from './MoodleSection'
 
 const TAG_COLORS = [
@@ -8,6 +10,47 @@ const TAG_COLORS = [
   '#14b8a6','#3b82f6','#8b5cf6','#ec4899',
   '#06b6d4','#84cc16','#f43f5e','#6366f1',
 ]
+
+const INTERVALS = [
+  { value: '3h',     label: 'Каждые 3 часа' },
+  { value: '6h',     label: 'Каждые 6 часов' },
+  { value: '12h',    label: 'Каждые 12 часов' },
+  { value: '24h',    label: 'Раз в сутки' },
+  { value: 'manual', label: 'Вручную' },
+]
+
+function formatTs(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('ru-RU', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+  })
+}
+
+function DiffSummary({ diff }: { diff: ScheduleDiff }) {
+  if (!diff.added.length && !diff.removed.length && !diff.moved.length) return null
+  return (
+    <div style={{ marginTop: 8, fontSize: 12, lineHeight: 1.8 }}>
+      {diff.added.length > 0 && (
+        <div style={{ color: 'var(--success)' }}>
+          + Добавлено {diff.added.length}: {diff.added.slice(0, 3).join('; ')}
+          {diff.added.length > 3 && ` и ещё ${diff.added.length - 3}…`}
+        </div>
+      )}
+      {diff.removed.length > 0 && (
+        <div style={{ color: 'var(--danger)' }}>
+          − Удалено {diff.removed.length}: {diff.removed.slice(0, 3).join('; ')}
+          {diff.removed.length > 3 && ` и ещё ${diff.removed.length - 3}…`}
+        </div>
+      )}
+      {diff.moved.length > 0 && (
+        <div style={{ color: 'var(--warning)' }}>
+          ↔ Перенесено {diff.moved.length}: {diff.moved.slice(0, 2).join('; ')}
+          {diff.moved.length > 2 && ` и ещё ${diff.moved.length - 2}…`}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface Props {
   theme:                Theme
@@ -29,7 +72,7 @@ interface Props {
   onUpdateTag:          (id: number, data: { name?: string; color?: string }) => Promise<void>
   onDeleteTag:          (id: number) => Promise<void>
   onCheckForUpdates:    () => void
-  onOpenTulguPanel:     () => void
+  onScheduleRefresh:    () => void
   onSaveSupabaseConfig: (url: string, key: string) => Promise<void>
   onOpenAuth:           () => void
   onSignOut:            () => Promise<void>
@@ -38,7 +81,76 @@ interface Props {
   onClose:              () => void
 }
 
-export default function SettingsPanel({ theme, tags, subjects, gradeScale, appVersion, checkStatus, tulguStatus, supaUser, supaConfigured, supabaseUrl, supabaseKey, syncStatus, lastSyncAt, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onOpenTulguPanel, onSaveSupabaseConfig, onOpenAuth, onSignOut, onManualSync, onSubjectsChanged, onClose }: Props) {
+export default function SettingsPanel({ theme, tags, subjects, gradeScale, appVersion, checkStatus, tulguStatus, supaUser, supaConfigured, supabaseUrl, supabaseKey, syncStatus, lastSyncAt, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onScheduleRefresh, onSaveSupabaseConfig, onOpenAuth, onSignOut, onManualSync, onSubjectsChanged, onClose }: Props) {
+
+  const { isAdmin } = useRole()
+
+  // ── TulGU integration ───────────────────────────────────────────────────
+  const [tulguConfig, setTulguConfig] = useState<TulguConfig>({ groupNumber: '', interval: 'manual' })
+  const [tulguSaving, setTulguSaving]       = useState(false)
+  const [tulguSaveState, setTulguSaveState] = useState<'idle' | 'saved'>('idle')
+  const [tulguSyncing, setTulguSyncing]     = useState(tulguStatus.isSyncing)
+  const [tulguSyncDiff, setTulguSyncDiff]   = useState<ScheduleDiff | null>(null)
+  const [tulguSyncMsg, setTulguSyncMsg]     = useState<string | null>(null)
+  const [tulguSyncError, setTulguSyncError] = useState<string | null>(null)
+  const [tulguLiveStatus, setTulguLiveStatus] = useState<TulguStatus>(tulguStatus)
+
+  useEffect(() => {
+    void window.api.tulgu.getConfig().then((r) => {
+      if (r.success) setTulguConfig(r.data)
+    })
+  }, [])
+
+  useEffect(() => {
+    setTulguLiveStatus(tulguStatus)
+    setTulguSyncing(tulguStatus.isSyncing)
+  }, [tulguStatus])
+
+  async function handleTulguSave() {
+    setTulguSaving(true)
+    try {
+      await window.api.tulgu.saveConfig(tulguConfig)
+      setTulguSaveState('saved')
+      setTimeout(() => setTulguSaveState('idle'), 2000)
+    } finally {
+      setTulguSaving(false)
+    }
+  }
+
+  async function handleTulguSyncNow() {
+    if (!tulguConfig.groupNumber.trim()) return
+    setTulguSyncing(true)
+    setTulguSyncDiff(null)
+    setTulguSyncMsg(null)
+    setTulguSyncError(null)
+    await window.api.tulgu.saveConfig(tulguConfig)
+    try {
+      const r = await window.api.tulgu.syncNow()
+      if (!r.success) throw new Error(r.error)
+      if (r.data.changed) {
+        setTulguSyncDiff(r.data.diff)
+        const parts: string[] = []
+        if (r.data.diff.added.length)   parts.push(`+${r.data.diff.added.length} добавлено`)
+        if (r.data.diff.removed.length) parts.push(`−${r.data.diff.removed.length} удалено`)
+        if (r.data.diff.moved.length)   parts.push(`↔ ${r.data.diff.moved.length} перенесено`)
+        setTulguSyncMsg(parts.join(', '))
+        onScheduleRefresh()
+      } else {
+        setTulguSyncMsg('Расписание не изменилось')
+      }
+      const s = await window.api.tulgu.getStatus()
+      if (s.success) setTulguLiveStatus(s.data)
+    } catch (e) {
+      setTulguSyncError(String(e))
+      const s = await window.api.tulgu.getStatus()
+      if (s.success) setTulguLiveStatus(s.data)
+    } finally {
+      setTulguSyncing(false)
+    }
+  }
+
+  const tulguConfigured = !!tulguConfig.groupNumber.trim()
+
   // ── Supabase config form ────────────────────────────────────────────────
   const [supaUrl,     setSupaUrl]     = useState(supabaseUrl)
   const [supaKey,     setSupaKey]     = useState(supabaseKey)
@@ -253,26 +365,118 @@ export default function SettingsPanel({ theme, tags, subjects, gradeScale, appVe
           </div>
         </div>
 
-        {/* TulGU schedule section */}
+        {/* ── Интеграции → ТулГУ ─────────────────────────────────────────── */}
         <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>
-          <div className="settings-section-title">Расписание ТулГУ</div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 10, lineHeight: 1.6 }}>
-            {tulguStatus.lastError ? (
-              <span style={{ color: 'var(--danger)' }}>⚠ Ошибка: {tulguStatus.lastError.slice(0, 80)}</span>
-            ) : tulguStatus.lastUpdated ? (
-              <>
-                <span style={{ color: 'var(--success)' }}>✓</span> Обновлено:{' '}
-                {new Date(tulguStatus.lastUpdated).toLocaleString('ru-RU', {
-                  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-                })}
-              </>
-            ) : (
-              <span style={{ color: 'var(--text-tertiary)' }}>Импорт расписания не настроен</span>
+          <div className="settings-section-title">Интеграции → ТулГУ</div>
+
+          {/* Status */}
+          {tulguLiveStatus.lastError ? (
+            <div style={{
+              background: 'var(--danger-light)', border: '1px solid var(--danger)',
+              borderRadius: 6, padding: '8px 12px', fontSize: 12, marginBottom: 10
+            }}>
+              <strong style={{ color: 'var(--danger)' }}>⚠ Ошибка:</strong>{' '}
+              <span style={{ color: 'var(--text-secondary)' }}>{tulguLiveStatus.lastError}</span>
+              {tulguLiveStatus.lastErrorAt && (
+                <div style={{ color: 'var(--text-tertiary)', marginTop: 2 }}>
+                  {formatTs(tulguLiveStatus.lastErrorAt)}
+                </div>
+              )}
+              {tulguLiveStatus.lastUpdated && (
+                <div style={{ color: 'var(--text-tertiary)', marginTop: 2 }}>
+                  Последнее успешное: {formatTs(tulguLiveStatus.lastUpdated)}
+                </div>
+              )}
+            </div>
+          ) : tulguLiveStatus.lastUpdated ? (
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>
+              <span style={{ color: 'var(--success)' }}>✓</span> Последнее обновление:{' '}
+              <strong>{formatTs(tulguLiveStatus.lastUpdated)}</strong>
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 10 }}>
+              Синхронизация ещё не выполнялась
+            </div>
+          )}
+
+          {tulguSyncMsg && (
+            <div style={{ fontSize: 12, color: tulguSyncError ? 'var(--danger)' : 'var(--success)', marginBottom: 6 }}>
+              {tulguSyncError ? `⚠ ${tulguSyncError}` : `✓ ${tulguSyncMsg}`}
+            </div>
+          )}
+          {!tulguSyncMsg && tulguSyncError && (
+            <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 6 }}>
+              ⚠ {tulguSyncError}
+            </div>
+          )}
+          {tulguSyncDiff && <DiffSummary diff={tulguSyncDiff} />}
+
+          <div style={{ marginTop: tulguSyncDiff ? 12 : 0, display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => void handleTulguSyncNow()}
+              disabled={tulguSyncing || !tulguConfigured}
+            >
+              {tulguSyncing ? '⟳ Обновление…' : 'Обновить сейчас'}
+            </button>
+            {!tulguConfigured && (
+              <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                Введите номер группы ниже
+              </span>
             )}
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={onOpenTulguPanel}>
-            🏫 Настроить расписание ТулГУ
+
+          {/* Group number */}
+          <div className="form-group">
+            <label className="form-label">Номер группы ТулГУ</label>
+            <input
+              className="form-input"
+              value={tulguConfig.groupNumber}
+              onChange={(e) => setTulguConfig((c) => ({ ...c, groupNumber: e.target.value }))}
+              placeholder="Например: Б260221"
+              maxLength={20}
+            />
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+              Используется API:{' '}
+              <code style={{ fontSize: 10, background: 'var(--bg-hover)', padding: '1px 4px', borderRadius: 3 }}>
+                tulsu.ru/schedule/queries/GetSchedule.php?search_field=GROUP_P&amp;search_value=…
+              </code>
+            </div>
+          </div>
+
+          {/* Auto-sync interval */}
+          <div className="form-group">
+            <label className="form-label">Интервал автообновления</label>
+            <select
+              className="form-select"
+              value={tulguConfig.interval}
+              onChange={(e) => setTulguConfig((c) => ({ ...c, interval: e.target.value }))}
+            >
+              {INTERVALS.map((i) => (
+                <option key={i.value} value={i.value}>{i.label}</option>
+              ))}
+            </select>
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4, lineHeight: 1.6 }}>
+              {tulguConfig.interval !== 'manual'
+                ? 'При запуске и по расписанию расписание обновляется автоматически. При ошибке — повтор через 15 мин.'
+                : 'Обновляйте расписание вручную кнопкой «Обновить сейчас».'}
+            </div>
+          </div>
+
+          <button
+            className="btn btn-primary btn-sm"
+            style={{ width: '100%', marginTop: 4 }}
+            onClick={() => void handleTulguSave()}
+            disabled={tulguSaving}
+          >
+            {tulguSaving ? 'Сохраняем…' : tulguSaveState === 'saved' ? '✓ Сохранено' : 'Сохранить настройки ТулГУ'}
           </button>
+        </div>
+
+        {/* ── Интеграции → Moodle ────────────────────────────────────────── */}
+        <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>
+          <div className="settings-section-title">Интеграции → Moodle</div>
+          <MoodleSection subjects={subjects} onSubjectsChanged={onSubjectsChanged} />
         </div>
 
         {/* Supabase / account section */}
@@ -383,11 +587,21 @@ export default function SettingsPanel({ theme, tags, subjects, gradeScale, appVe
           )}
         </div>
 
-        {/* Moodle ТулГУ section */}
-        <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>
-          <div className="settings-section-title">Moodle ТулГУ</div>
-          <MoodleSection subjects={subjects} onSubjectsChanged={onSubjectsChanged} />
-        </div>
+        {/* ── Admin panel (visible to admins only) ───────────────────────── */}
+        {isAdmin && (
+          <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>
+            <div className="settings-section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                background: 'var(--accent)', color: '#fff', letterSpacing: '.5px',
+              }}>
+                ADMIN
+              </span>
+              Панель администратора
+            </div>
+            <AdminPanel />
+          </div>
+        )}
 
         {/* About / updates section */}
         <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>

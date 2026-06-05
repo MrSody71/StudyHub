@@ -98,6 +98,18 @@ const api = {
     create:   (data: unknown) => ipcRenderer.invoke('sessions:create', data),
     getStats: ()              => ipcRenderer.invoke('sessions:getStats')
   },
+  wallet: {
+    getCategories:    ()                            => ipcRenderer.invoke('wallet:getCategories'),
+    createCategory:   (data: unknown)               => ipcRenderer.invoke('wallet:createCategory', data),
+    updateCategory:   (id: number, data: unknown)   => ipcRenderer.invoke('wallet:updateCategory', id, data),
+    deleteCategory:   (id: number)                  => ipcRenderer.invoke('wallet:deleteCategory', id),
+    getTransactions:  (filter?: unknown)             => ipcRenderer.invoke('wallet:getTransactions', filter),
+    createTransaction:(data: unknown)               => ipcRenderer.invoke('wallet:createTransaction', data),
+    updateTransaction:(id: number, data: unknown)   => ipcRenderer.invoke('wallet:updateTransaction', id, data),
+    deleteTransaction:(id: number)                  => ipcRenderer.invoke('wallet:deleteTransaction', id),
+    getStats:         (filter?: unknown)             => ipcRenderer.invoke('wallet:getStats', filter),
+    exportCsv:        (filter?: unknown)             => ipcRenderer.invoke('wallet:exportCsv', filter),
+  },
   notifications: {
     show: (title: string, body: string) => ipcRenderer.invoke('notifications:show', title, body)
   },

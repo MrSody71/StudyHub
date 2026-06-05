@@ -30,6 +30,11 @@ import { createSession, getSessionStats } from '../db/sessions'
 import { getGradesBySubject, createGrade, updateGrade, deleteGrade, getSubjectGradeStats, getAllGrades } from '../db/grades'
 import { getNotesBySubject, createNote, updateNote, deleteNote, searchNotes } from '../db/notes'
 import { getDashboardData } from '../db/dashboard'
+import {
+  getWalletCategories, createWalletCategory, updateWalletCategory, deleteWalletCategory,
+  getWalletTransactions, createWalletTransaction, updateWalletTransaction, deleteWalletTransaction,
+  getWalletStats, exportWalletCsv,
+} from '../db/wallet'
 
 function wrap<T>(fn: () => T): { success: true; data: T } | { success: false; error: string } {
   try {
@@ -306,4 +311,16 @@ export function setupIpcHandlers(): void {
       }
     }
   )
+
+  // ── Wallet ────────────────────────────────────────────────────────────────
+  ipcMain.handle('wallet:getCategories',    ()                                => wrap(() => getWalletCategories()))
+  ipcMain.handle('wallet:createCategory',   (_e, data)                       => wrap(() => createWalletCategory(data)))
+  ipcMain.handle('wallet:updateCategory',   (_e, id: number, data)           => wrap(() => updateWalletCategory(id, data)))
+  ipcMain.handle('wallet:deleteCategory',   (_e, id: number)                 => wrap(() => { deleteWalletCategory(id); return null }))
+  ipcMain.handle('wallet:getTransactions',  (_e, filter?)                    => wrap(() => getWalletTransactions(filter)))
+  ipcMain.handle('wallet:createTransaction',(_e, data)                       => wrap(() => createWalletTransaction(data)))
+  ipcMain.handle('wallet:updateTransaction',(_e, id: number, data)           => wrap(() => updateWalletTransaction(id, data)))
+  ipcMain.handle('wallet:deleteTransaction',(_e, id: number)                 => wrap(() => { deleteWalletTransaction(id); return null }))
+  ipcMain.handle('wallet:getStats',         (_e, filter?)                    => wrap(() => getWalletStats(filter)))
+  ipcMain.handle('wallet:exportCsv',        (_e, filter?)                    => wrap(() => exportWalletCsv(filter)))
 }

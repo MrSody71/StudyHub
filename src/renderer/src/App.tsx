@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguStatus, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort } from './types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguStatus, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort, AppView } from './types'
+import { AuthContext, type UserProfile } from './contexts/AuthContext'
 import Dashboard from './components/Dashboard'
+import MobileDrawer from './components/MobileDrawer'
 import SubjectList from './components/SubjectList'
 import SemesterManager from './components/SemesterManager'
 import TaskList from './components/TaskList'
@@ -8,28 +10,29 @@ import TaskDetail from './components/TaskDetail'
 import GradeList from './components/GradeList'
 import NoteList from './components/NoteList'
 import WeeklySchedule from './components/WeeklySchedule'
-import TulguPanel from './components/TulguPanel'
 import MonthCalendar from './components/MonthCalendar'
 import PomodoroTimer from './components/PomodoroTimer'
 import StudyStats from './components/StudyStats'
 import SettingsPanel from './components/SettingsPanel'
+import WalletView from './components/WalletView'
 import AuthScreen from './components/AuthScreen'
 import CloudStatus from './components/CloudStatus'
 import { usePomodoro } from './hooks/usePomodoro'
 import { initSupabase, getSupabase, clearSupabase } from './lib/supabase'
 import { pushRow, pushDelete, pushTaskTags, pullAll, uploadLocalData, runSync, type SyncStatus } from './lib/sync'
+import { useRole } from './hooks/useRole'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
-type AppView    = 'dashboard' | 'tasks' | 'schedule' | 'calendar' | 'timer'
 type SubjectTab = 'tasks' | 'grades' | 'notes'
 
 async function unwrap<T>(p: Promise<IpcResult<T>>): Promise<T> {
   const r = await p
-  if (!r.success) throw new Error(r.error)
+  if (!r.success) throw Object.assign(new Error(r.error), { isAuthError: r.error?.includes('авторизован') })
   return r.data
 }
 
 export default function App() {
+  const { isAdmin } = useRole()
   const [theme, setTheme]                   = useState<Theme>('light')
   const [view, setView]                     = useState<AppView>('dashboard')
   const [dashRefreshKey, setDashRefreshKey] = useState(0)
@@ -52,7 +55,7 @@ export default function App() {
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
   const [selectedTaskId, setSelectedTaskId]       = useState<number | null>(null)
   const [showSettings, setShowSettings]     = useState(false)
-  const [showTulguPanel, setShowTulguPanel] = useState(false)
+  const [showDrawer, setShowDrawer]         = useState(false)
   const [tulguStatus, setTulguStatus]       = useState<TulguStatus>({
     isSyncing: false, lastUpdated: null, lastError: null, lastErrorAt: null
   })
@@ -65,6 +68,7 @@ export default function App() {
   type AuthStatus = 'init' | 'local' | 'unauthenticated' | 'authenticated'
   const [authStatus,       setAuthStatus]       = useState<AuthStatus>('init')
   const [supaUser,         setSupaUser]         = useState<{ email: string; id: string } | null>(null)
+  const [userProfile,      setUserProfile]      = useState<UserProfile | null>(null)
   const [showAuthScreen,   setShowAuthScreen]   = useState(false)
   const [showUploadDialog, setShowUploadDialog] = useState(false)
   const [supaConfigured,   setSupaConfigured]   = useState(false)
@@ -213,17 +217,17 @@ export default function App() {
 
   async function loadSubjects() {
     try { setSubjects(await unwrap(window.api.subjects.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadArchivedSubjects() {
     try { setArchivedSubjects(await unwrap(window.api.subjects.getAll({ archived: true }))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadSemesters() {
     try { setSemesters(await unwrap(window.api.semesters.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadTasks(subjectId: number) {
@@ -236,42 +240,42 @@ export default function App() {
         autoSelectTaskRef.current = null
         if (loaded.some((t) => t.id === id)) setSelectedTaskId(id)
       }
-    } catch (e) { setError(String(e)) }
+    } catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadAllDeadlineTasks() {
     try { setAllDeadlineTasks(await unwrap(window.api.tasks.getAllWithDeadline())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadTags() {
     try { setTags(await unwrap(window.api.tags.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadScheduleEntries() {
     try { setScheduleEntries(await unwrap(window.api.schedule.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadGrades(subjectId: number) {
     try { setGrades(await unwrap(window.api.grades.getBySubject(subjectId))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadGradeStats() {
     try { setGradeStats(await unwrap(window.api.grades.getSubjectStats())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadAllGrades() {
     try { setAllGrades(await unwrap(window.api.grades.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadNotes(subjectId: number) {
     try { setNotes(await unwrap(window.api.notes.getBySubject(subjectId))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadGradeScale() {
@@ -297,12 +301,12 @@ export default function App() {
 
   async function loadAttachments(taskId: number) {
     try { setAttachments(await unwrap(window.api.attachments.getByTask(taskId))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadSubtasks(taskId: number) {
     try { setSubtasks(await unwrap(window.api.subtasks.getByTask(taskId))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   // ── Subject handlers ─────────────────────────────────────────────────────
@@ -619,6 +623,34 @@ export default function App() {
 
   // ── Supabase auth ────────────────────────────────────────────────────────
 
+  /** Loads user profile (role) from the profiles table after sign-in */
+  async function loadUserProfile(userId: string, email: string) {
+    const sb = getSupabase()
+    if (!sb) return
+    try {
+      const { data, error } = await sb
+        .from('profiles')
+        .select('id, role, full_name')
+        .eq('id', userId)
+        .single()
+      if (error || !data) {
+        // Profile missing — create with default role (backfill case)
+        await sb.from('profiles').upsert({ id: userId, role: 'student' }, { onConflict: 'id' })
+        setUserProfile({ id: userId, email, role: 'student', full_name: null })
+      } else {
+        setUserProfile({
+          id:        userId,
+          email,
+          role:      (data.role ?? 'student') as 'student' | 'admin',
+          full_name: data.full_name ?? null,
+        })
+      }
+    } catch {
+      // profiles table may not exist yet — fail silently with default role
+      setUserProfile({ id: userId, email, role: 'student', full_name: null })
+    }
+  }
+
   async function initAuth() {
     const urlR = await window.api.settings.get('supabase_url')
     const keyR = await window.api.settings.get('supabase_anon_key')
@@ -641,6 +673,7 @@ export default function App() {
         const user = { email: session.user.email!, id: session.user.id }
         setSupaUser(user)
         setAuthStatus('authenticated')
+        void loadUserProfile(user.id, user.email)
         void startupSync(user.id)
         return
       }
@@ -669,6 +702,7 @@ export default function App() {
     setSupaUser(user)
     setAuthStatus('authenticated')
     setShowAuthScreen(false)
+    void loadUserProfile(user.id, user.email)
     const skipR = await window.api.settings.get('auth_skip')
     const hadLocalData = skipR.success && skipR.data === '1' && subjects.length > 0
     await window.api.settings.set('auth_skip', '0')
@@ -714,6 +748,7 @@ export default function App() {
     if (sb) await sb.auth.signOut()
     clearSupabase()
     setSupaUser(null)
+    setUserProfile(null)
     setAuthStatus('unauthenticated')
     setShowAuthScreen(true)
   }
@@ -788,6 +823,7 @@ export default function App() {
   }
 
   return (
+    <AuthContext.Provider value={{ userProfile }}>
     <div className="app">
       {/* ── Update modal ───────────────────────────────────────────────────── */}
       {showUpdateModal && updateVersion && (
@@ -867,6 +903,36 @@ export default function App() {
         </div>
       )}
 
+      {/* ── Mobile top bar (hidden on desktop) ────────────────────────────── */}
+      <div className="mobile-top-bar">
+        <button
+          className="mobile-burger-btn"
+          onClick={() => setShowDrawer(true)}
+          aria-label="Открыть меню"
+        >
+          <span className="mobile-burger-line" />
+          <span className="mobile-burger-line" />
+          <span className="mobile-burger-line" />
+        </button>
+        <span className="mobile-top-bar-title">
+          {view === 'dashboard' ? 'Дашборд'
+           : view === 'subjects' ? 'Предметы'
+           : view === 'tasks'    ? (selectedSubject ? selectedSubject.name : 'Задания')
+           : view === 'schedule' ? 'Расписание'
+           : view === 'calendar' ? 'Календарь'
+           : 'Таймер'}
+        </span>
+        <div className="mobile-top-bar-actions">
+          {supaUser && (
+            <CloudStatus
+              status={syncStatus}
+              lastSyncAt={lastSyncAt}
+              onClick={() => void handleManualSync()}
+            />
+          )}
+        </div>
+      </div>
+
       <div className="sidebar">
         <div className="sidebar-header">
           <span className="app-logo">📚</span>
@@ -893,30 +959,12 @@ export default function App() {
               <span className="pom-running-badge" />
             )}
           </button>
+          {isAdmin && (
+            <button className={`view-nav-btn${view === 'wallet' ? ' active' : ''}`} onClick={() => setView('wallet')}>
+              <span className="view-nav-icon">💳</span> Кошелёк
+            </button>
+          )}
 
-          {/* Separator */}
-          <div style={{ height: 1, background: 'rgba(255,255,255,.07)', margin: '4px 0' }} />
-
-          <button
-            className={`view-nav-btn${showTulguPanel ? ' active' : ''}`}
-            onClick={() => setShowTulguPanel(true)}
-            title={
-              tulguStatus.lastError
-                ? `Ошибка синхронизации${tulguStatus.lastUpdated ? ` · Обновлено: ${new Date(tulguStatus.lastUpdated).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}`
-                : tulguStatus.lastUpdated
-                ? `Обновлено: ${new Date(tulguStatus.lastUpdated).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
-                : 'Импорт расписания ТулГУ'
-            }
-          >
-            <span className="view-nav-icon">🏫</span>
-            <span>ТулГУ</span>
-            {tulguStatus.isSyncing && (
-              <span className="tulgu-sync-badge">⟳</span>
-            )}
-            {!tulguStatus.isSyncing && tulguStatus.lastError && (
-              <span className="tulgu-warn-badge">⚠</span>
-            )}
-          </button>
         </div>
 
         <SubjectList
@@ -965,6 +1013,38 @@ export default function App() {
           <button className="settings-btn" onClick={() => setShowSettings(true)}>⚙ Настройки</button>
         </div>
       </div>
+
+      {/* ── Mobile drawer navigation ─────────────────────────────────────── */}
+      <MobileDrawer
+        open={showDrawer}
+        view={view}
+        pomRunning={pomState.status === 'running'}
+        isAdmin={isAdmin}
+        onNavigate={(v) => { setView(v); setSelectedTaskId(null) }}
+        onSettings={() => setShowSettings(true)}
+        onClose={() => setShowDrawer(false)}
+      />
+
+      {/* ── Subjects view (mobile — replaces sidebar subject list) ────────── */}
+      {view === 'subjects' && (
+        <div className="full-content-panel mobile-subjects-panel">
+          <SubjectList
+            subjects={subjects}
+            archivedSubjects={archivedSubjects}
+            selectedSubjectId={selectedSubjectId}
+            semesters={semesters}
+            gradeStats={gradeStats}
+            gradeScale={gradeScale}
+            subjectSort={subjectSort}
+            onSelect={(id) => { setSelectedSubjectId(id); setView('tasks') }}
+            onCreate={handleCreateSubject}
+            onUpdate={handleUpdateSubject}
+            onDelete={handleDeleteSubject}
+            onArchive={handleArchiveSubject}
+            onSortChange={handleSubjectSortChange}
+          />
+        </div>
+      )}
 
       {/* ── Dashboard view ───────────────────────────────────────────────── */}
       {view === 'dashboard' && (
@@ -1054,6 +1134,9 @@ export default function App() {
 
           {selectedTask && (
             <div className="detail-panel">
+              <button className="mobile-back-btn" onClick={() => setSelectedTaskId(null)}>
+                ← Назад к заданиям
+              </button>
               <TaskDetail
                 task={selectedTask}
                 attachments={attachments}
@@ -1118,6 +1201,30 @@ export default function App() {
         </div>
       )}
 
+      {/* ── Wallet view ───────────────────────────────────────────────────── */}
+      {view === 'wallet' && (
+        isAdmin ? (
+          <div className="full-content-panel">
+            <WalletView />
+          </div>
+        ) : (
+          <div className="full-content-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 14 }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
+              <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Доступ запрещён</div>
+              <div style={{ fontSize: 13 }}>Этот раздел доступен только администраторам.</div>
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ marginTop: 16 }}
+                onClick={() => setView('dashboard')}
+              >
+                На дашборд
+              </button>
+            </div>
+          </div>
+        )
+      )}
+
       {showSettings && (
         <SettingsPanel
           theme={theme}
@@ -1139,7 +1246,7 @@ export default function App() {
           onUpdateTag={handleUpdateTag}
           onDeleteTag={handleDeleteTag}
           onCheckForUpdates={handleCheckForUpdates}
-          onOpenTulguPanel={() => { setShowSettings(false); setShowTulguPanel(true) }}
+          onScheduleRefresh={() => { void loadScheduleEntries(); void loadSubjects() }}
           onSaveSupabaseConfig={handleSaveSupabaseConfig}
           onOpenAuth={() => { setShowSettings(false); setShowAuthScreen(true) }}
           onSignOut={handleSignOut}
@@ -1192,17 +1299,6 @@ export default function App() {
         </div>
       )}
 
-      {showTulguPanel && (
-        <TulguPanel
-          status={tulguStatus}
-          onClose={() => setShowTulguPanel(false)}
-          onScheduleRefresh={() => {
-            void loadScheduleEntries()
-            void loadSubjects()
-          }}
-        />
-      )}
-
       {showSemesterMgr && (
         <SemesterManager
           semesters={semesters}
@@ -1213,6 +1309,8 @@ export default function App() {
           onClose={() => setShowSemesterMgr(false)}
         />
       )}
+
     </div>
+    </AuthContext.Provider>
   )
 }

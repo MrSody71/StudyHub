@@ -151,7 +151,7 @@ export default function AuthScreen({ onSignIn, onSignUp, onWorkLocally }: Props)
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     onBlur={() => tab === 'register' && setPwdTouched(true)}
-                    placeholder={tab === 'register' ? 'Мин. 8 символов, буквы и цифры' : '••••••••'}
+                    placeholder={tab === 'register' ? 'Минимум 8 символов, буквы и цифры обязательны' : '••••••••'}
                     required
                     style={{ paddingRight: 40 }}
                   />
@@ -171,7 +171,7 @@ export default function AuthScreen({ onSignIn, onSignUp, onWorkLocally }: Props)
                   </button>
                 </div>
 
-                {/* Strength bar + rules — only on register */}
+                {/* Strength bar + hint — only on register */}
                 {tab === 'register' && password.length > 0 && (
                   <div style={{ marginTop: 8 }}>
                     {/* Strength bar */}
@@ -193,21 +193,19 @@ export default function AuthScreen({ onSignIn, onSignUp, onWorkLocally }: Props)
                       )}
                     </div>
 
-                    {/* Rules checklist — show only when touched or any rule fails */}
-                    {(pwdTouched || !pwdValid) && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        {rules.map(r => (
-                          <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                            <span style={{ color: r.ok ? 'var(--success)' : 'var(--danger)', fontSize: 13, lineHeight: 1 }}>
-                              {r.ok ? '✓' : '✗'}
-                            </span>
-                            <span style={{ color: r.ok ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
-                              {r.label}
-                            </span>
-                          </div>
-                        ))}
+                    {/* Error message — show only when touched and invalid */}
+                    {pwdTouched && !pwdValid && (
+                      <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>
+                        Пароль должен содержать минимум 8 символов, включая буквы и цифры
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Static hint — show on register when field is empty */}
+                {tab === 'register' && password.length === 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 5 }}>
+                    Минимум 8 символов, буквы и цифры обязательны
                   </div>
                 )}
               </div>

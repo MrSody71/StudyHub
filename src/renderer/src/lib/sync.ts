@@ -27,6 +27,8 @@ const SYNC_TABLES = [
   'notes',
   'study_sessions',
   'schedule_entries',
+  'wallet_categories',
+  'wallet_transactions',
 ] as const
 
 type SyncTable = typeof SYNC_TABLES[number]
