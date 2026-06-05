@@ -4,22 +4,24 @@ interface Props {
   open:       boolean
   view:       AppView
   pomRunning: boolean
+  isAdmin:    boolean
   onNavigate: (v: AppView) => void
   onSettings: () => void
   onClose:    () => void
 }
 
-const NAV_ITEMS: { view: AppView; icon: string; label: string }[] = [
+const BASE_NAV_ITEMS: { view: AppView; icon: string; label: string; adminOnly?: boolean }[] = [
   { view: 'dashboard', icon: '🏠', label: 'Дашборд'    },
   { view: 'subjects',  icon: '📚', label: 'Предметы'   },
   { view: 'tasks',     icon: '📋', label: 'Задания'     },
   { view: 'schedule',  icon: '🗓', label: 'Расписание'  },
   { view: 'calendar',  icon: '📅', label: 'Календарь'   },
   { view: 'timer',     icon: '⏱', label: 'Таймер'      },
-  { view: 'wallet',    icon: '💳', label: 'Кошелёк'     },
+  { view: 'wallet',    icon: '💳', label: 'Кошелёк',     adminOnly: true },
 ]
 
-export default function MobileDrawer({ open, view, pomRunning, onNavigate, onSettings, onClose }: Props) {
+export default function MobileDrawer({ open, view, pomRunning, isAdmin, onNavigate, onSettings, onClose }: Props) {
+  const navItems = BASE_NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin)
   return (
     <>
       {/* Backdrop — darkens the rest of the screen */}
@@ -39,7 +41,7 @@ export default function MobileDrawer({ open, view, pomRunning, onNavigate, onSet
 
         {/* Navigation items */}
         <div className="mobile-drawer-nav">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <button
               key={item.view}
               className={`mobile-drawer-item${view === item.view ? ' active' : ''}`}
