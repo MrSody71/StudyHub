@@ -45,7 +45,7 @@ export function pushRow(
   const sb = getSupabase()
   if (!sb || !navigator.onLine) return
   sb.from(table)
-    .upsert({ ...row, user_id: userId }, { onConflict: 'id' })
+    .upsert({ ...row, user_id: userId }, { onConflict: 'user_id,id' })
     .then(({ error }) => {
       if (error) console.warn('[sync] push error', table, error.message)
     })
@@ -64,7 +64,7 @@ export function pushDelete(
   if (!sb || !navigator.onLine) return
   const now = new Date().toISOString()
   sb.from(table)
-    .upsert({ id, user_id: userId, is_deleted: true, updated_at: now }, { onConflict: 'id' })
+    .upsert({ id, user_id: userId, is_deleted: true, updated_at: now }, { onConflict: 'user_id,id' })
     .then(({ error }) => {
       if (error) console.warn('[sync] push delete error', table, id, error.message)
     })
@@ -96,7 +96,7 @@ export function pushTaskTags(
         user_id: userId,
         created_at: now, updated_at: now,
       })),
-      { onConflict: 'task_id,tag_id' }
+      { onConflict: 'user_id,task_id,tag_id' }
     )
     if (error) console.warn('[sync] push task_tags error', error.message)
   })()
@@ -187,7 +187,7 @@ export async function uploadLocalData(userId: string): Promise<void> {
       is_folder:  row.is_folder   !== undefined ? !!row.is_folder   : undefined,
     }))
     try {
-      const { error } = await sb.from(table).upsert(batch, { onConflict: 'id' })
+      const { error } = await sb.from(table).upsert(batch, { onConflict: 'user_id,id' })
       if (error) console.warn('[sync] upload error', table, error.message)
     } catch (e) {
       console.warn('[sync] upload exception', table, e)
@@ -222,7 +222,7 @@ export async function runSync(
           is_folder:   row.is_folder   !== undefined ? !!row.is_folder   : undefined,
         })).filter(r => r !== undefined)
         try {
-          await sb.from(table).upsert(batch as Record<string, unknown>[], { onConflict: 'id' })
+          await sb.from(table).upsert(batch as Record<string, unknown>[], { onConflict: 'user_id,id' })
         } catch { /* non-fatal */ }
       }
     }
