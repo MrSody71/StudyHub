@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import type { Tag, Theme, TulguConfig, TulguStatus, ScheduleDiff, Subject } from '../types'
 import type { SyncStatus } from '../lib/sync'
+import { useRole } from '../hooks/useRole'
+import AdminPanel from './AdminPanel'
 import MoodleSection from './MoodleSection'
 
 const TAG_COLORS = [
@@ -80,6 +82,8 @@ interface Props {
 }
 
 export default function SettingsPanel({ theme, tags, subjects, gradeScale, appVersion, checkStatus, tulguStatus, supaUser, supaConfigured, supabaseUrl, supabaseKey, syncStatus, lastSyncAt, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onScheduleRefresh, onSaveSupabaseConfig, onOpenAuth, onSignOut, onManualSync, onSubjectsChanged, onClose }: Props) {
+
+  const { isAdmin } = useRole()
 
   // ── TulGU integration ───────────────────────────────────────────────────
   const [tulguConfig, setTulguConfig] = useState<TulguConfig>({ groupNumber: '', interval: 'manual' })
@@ -582,6 +586,22 @@ export default function SettingsPanel({ theme, tags, subjects, gradeScale, appVe
             </div>
           )}
         </div>
+
+        {/* ── Admin panel (visible to admins only) ───────────────────────── */}
+        {isAdmin && (
+          <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>
+            <div className="settings-section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                background: 'var(--accent)', color: '#fff', letterSpacing: '.5px',
+              }}>
+                ADMIN
+              </span>
+              Панель администратора
+            </div>
+            <AdminPanel />
+          </div>
+        )}
 
         {/* About / updates section */}
         <div className="settings-section" style={{ borderTop: '1px solid var(--border)' }}>

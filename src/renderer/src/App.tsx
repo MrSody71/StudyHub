@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguStatus, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort, AppView } from './types'
+import { AuthContext, type UserProfile } from './contexts/AuthContext'
 import Dashboard from './components/Dashboard'
 import MobileDrawer from './components/MobileDrawer'
 import SubjectList from './components/SubjectList'
@@ -64,6 +65,7 @@ export default function App() {
   type AuthStatus = 'init' | 'local' | 'unauthenticated' | 'authenticated'
   const [authStatus,       setAuthStatus]       = useState<AuthStatus>('init')
   const [supaUser,         setSupaUser]         = useState<{ email: string; id: string } | null>(null)
+  const [userProfile,      setUserProfile]      = useState<UserProfile | null>(null)
   const [showAuthScreen,   setShowAuthScreen]   = useState(false)
   const [showUploadDialog, setShowUploadDialog] = useState(false)
   const [supaConfigured,   setSupaConfigured]   = useState(false)
@@ -618,6 +620,34 @@ export default function App() {
 
   // ── Supabase auth ────────────────────────────────────────────────────────
 
+  /** Loads user profile (role) from the profiles table after sign-in */
+  async function loadUserProfile(userId: string, email: string) {
+    const sb = getSupabase()
+    if (!sb) return
+    try {
+      const { data, error } = await sb
+        .from('profiles')
+        .select('id, role, full_name')
+        .eq('id', userId)
+        .single()
+      if (error || !data) {
+        // Profile missing — create with default role (backfill case)
+        await sb.from('profiles').upsert({ id: userId, role: 'student' }, { onConflict: 'id' })
+        setUserProfile({ id: userId, email, role: 'student', full_name: null })
+      } else {
+        setUserProfile({
+          id:        userId,
+          email,
+          role:      (data.role ?? 'student') as 'student' | 'admin',
+          full_name: data.full_name ?? null,
+        })
+      }
+    } catch {
+      // profiles table may not exist yet — fail silently with default role
+      setUserProfile({ id: userId, email, role: 'student', full_name: null })
+    }
+  }
+
   async function initAuth() {
     const urlR = await window.api.settings.get('supabase_url')
     const keyR = await window.api.settings.get('supabase_anon_key')
@@ -640,6 +670,7 @@ export default function App() {
         const user = { email: session.user.email!, id: session.user.id }
         setSupaUser(user)
         setAuthStatus('authenticated')
+        void loadUserProfile(user.id, user.email)
         void startupSync(user.id)
         return
       }
@@ -668,6 +699,7 @@ export default function App() {
     setSupaUser(user)
     setAuthStatus('authenticated')
     setShowAuthScreen(false)
+    void loadUserProfile(user.id, user.email)
     const skipR = await window.api.settings.get('auth_skip')
     const hadLocalData = skipR.success && skipR.data === '1' && subjects.length > 0
     await window.api.settings.set('auth_skip', '0')
@@ -713,6 +745,7 @@ export default function App() {
     if (sb) await sb.auth.signOut()
     clearSupabase()
     setSupaUser(null)
+    setUserProfile(null)
     setAuthStatus('unauthenticated')
     setShowAuthScreen(true)
   }
@@ -787,6 +820,7 @@ export default function App() {
   }
 
   return (
+    <AuthContext.Provider value={{ userProfile }}>
     <div className="app">
       {/* ── Update modal ───────────────────────────────────────────────────── */}
       {showUpdateModal && updateVersion && (
@@ -1244,5 +1278,6 @@ export default function App() {
       )}
 
     </div>
+    </AuthContext.Provider>
   )
 }
