@@ -4084,40 +4084,62 @@ body {
 .cloud-status-syncing .cloud-icon { color: #60a5fa; }
 .cloud-status-error   .cloud-icon { color: #f87171; }
 
-/* ── Bottom nav (mobile only, hidden on desktop) ──────────────────────────── */
-.bottom-nav { display: none; }
+/* ── Mobile drawer (hidden on desktop via media query) ────────────────────── */
+.mobile-drawer-backdrop {
+  display: none;
+}
+.mobile-drawer {
+  display: none;
+}
 
 /* ── Mobile responsive ───────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  /* Allow body/root to scroll on mobile */
+
+  /* ── Base layout ─────────────────────────────────────────────────────── */
   html, body, #root { height: 100%; overflow: hidden; }
 
-  /* App becomes vertical flex with bottom nav */
   .app {
     flex-direction: column;
     height: 100dvh;
     overflow: hidden;
+    background: var(--bg-panel);
   }
 
-  /* Hide desktop sidebar */
+  /* Hide desktop sidebar on mobile */
   .sidebar { display: none; }
 
-  /* Content fills space above bottom nav */
+  /* Content panels: fill height, scrollable, centered at 600px */
   .full-content-panel,
   .main-panel {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    width: 100%;
+    max-width: 600px;
+    align-self: center;
+    box-sizing: border-box;
   }
 
-  /* Detail panel becomes full-screen overlay on mobile */
+  /* Subjects panel in mobile view — sidebar-style background */
+  .mobile-subjects-panel {
+    background: var(--bg-sidebar);
+    max-width: 600px;
+  }
+
+  /* Main panel (tasks) — no right border */
+  .main-panel {
+    border-right: none;
+  }
+
+  /* Detail panel — full-screen overlay */
   .detail-panel {
     position: fixed;
     inset: 0;
-    bottom: 60px;
     z-index: 200;
     width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     background: var(--bg-panel);
@@ -4125,83 +4147,33 @@ body {
     border-top: 1px solid var(--border);
   }
 
-  /* ── Bottom navigation bar ────────────────────────────────────────────── */
-  .bottom-nav {
-    display: flex;
-    flex-shrink: 0;
-    height: 60px;
-    background: var(--bg-sidebar);
-    border-top: 1px solid rgba(255,255,255,.06);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+  /* Settings and other overlay panels — full screen */
+  .settings-overlay {
+    align-items: stretch;
+    padding: 0;
+  }
+  .settings-modal {
+    width: 100% !important;
+    max-width: 600px !important;
+    margin: 0 auto;
+    border-radius: 0 !important;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow-y: auto;
   }
 
-  .bottom-nav-item {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    background: none;
-    border: none;
-    color: var(--text-sidebar);
-    cursor: pointer;
-    min-height: 44px;
-    padding: 6px 4px;
-    transition: color var(--transition), background var(--transition);
-    position: relative;
-  }
-
-  .bottom-nav-item.active {
-    color: var(--accent);
-  }
-
-  .bottom-nav-item:active { background: rgba(255,255,255,.06); }
-
-  .bottom-nav-icon {
-    font-size: 18px;
-    line-height: 1;
-    position: relative;
-    display: inline-block;
-  }
-
-  .bottom-nav-label {
-    font-size: 10px;
-    font-weight: 500;
-    white-space: nowrap;
-  }
-
-  .bottom-nav-badge {
-    position: absolute;
-    top: -2px;
-    right: -4px;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--danger);
-    border: 1px solid var(--bg-sidebar);
-  }
-
-  /* ── Tasks layout on mobile: full-width list, no side panel ───────────── */
-  /* The tasks view normally renders main-panel + detail-panel side by side.
-     On mobile, main-panel is full width and detail-panel is a full-screen overlay. */
-  .main-panel {
-    border-right: none;
-    width: 100%;
-  }
-
-  /* Panel headers — tighter padding */
+  /* ── Panel headers ───────────────────────────────────────────────────── */
   .panel-header {
-    padding: 0 14px;
+    padding: 0 16px;
     height: 48px;
   }
 
-  /* Task items — larger touch targets */
+  /* ── Task items — larger touch targets ───────────────────────────────── */
   .task-item {
-    padding: 13px 14px;
+    padding: 13px 16px;
   }
 
-  /* Subject tab bar wraps on mobile */
+  /* ── Subject tab bar ─────────────────────────────────────────────────── */
   .subject-tab-bar {
     overflow-x: auto;
     flex-wrap: nowrap;
@@ -4240,14 +4212,26 @@ body {
   }
 
   /* ── Modals: full-screen on mobile ────────────────────────────────────── */
-  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
 
   .modal {
     width: 100% !important;
-    max-width: 100% !important;
-    max-height: 92dvh;
+    max-width: 600px !important;
+    margin: 0 auto;
+    max-height: 94dvh;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
     overflow-y: auto;
+  }
+
+  /* Modal close button — top-right corner */
+  .modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg-modal, var(--bg-panel));
   }
 
   /* ── Minimum font sizes ───────────────────────────────────────────────── */
@@ -4280,36 +4264,189 @@ body {
     min-height: 44px;
   }
 
-  /* ── Mobile header (replaces sidebar header on mobile) ───────────────── */
+  /* ── Mobile top bar ──────────────────────────────────────────────────── */
   .mobile-top-bar {
     display: flex;
     align-items: center;
-    height: 48px;
-    padding: 0 14px;
+    height: 52px;
+    padding: 0 8px 0 4px;
     background: var(--bg-sidebar);
     border-bottom: 1px solid rgba(255,255,255,.06);
-    gap: 10px;
+    gap: 0;
     flex-shrink: 0;
+    padding-top: env(safe-area-inset-top, 0px);
   }
 
   .mobile-top-bar-title {
     flex: 1;
-    font-size: 15px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -.3px;
+    text-align: center;
+    padding: 0 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-top-bar-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    min-width: 44px;
+    justify-content: flex-end;
+  }
+
+  /* ── Burger button ───────────────────────────────────────────────────── */
+  .mobile-burger-btn {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    width: 44px;
+    height: 44px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    border-radius: 8px;
+    transition: background .15s;
+  }
+  .mobile-burger-btn:active { background: rgba(255,255,255,.1); }
+
+  .mobile-burger-line {
+    display: block;
+    width: 20px;
+    height: 2px;
+    background: #fff;
+    border-radius: 2px;
+    transition: opacity .15s;
+  }
+
+  /* ── Mobile drawer ───────────────────────────────────────────────────── */
+  .mobile-drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0);
+    z-index: 400;
+    pointer-events: none;
+    transition: background .25s;
+  }
+  .mobile-drawer-backdrop.visible {
+    background: rgba(0, 0, 0, .52);
+    pointer-events: auto;
+  }
+
+  .mobile-drawer {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 272px;
+    max-width: 82vw;
+    background: var(--bg-sidebar);
+    z-index: 410;
+    transform: translateX(-100%);
+    transition: transform .26s cubic-bezier(.4, 0, .2, 1);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-shadow: 4px 0 24px rgba(0,0,0,.35);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mobile-drawer.open {
+    transform: translateX(0);
+  }
+
+  .mobile-drawer-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 56px;
+    padding: 0 20px;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    flex-shrink: 0;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .mobile-drawer-app-title {
+    font-size: 16px;
     font-weight: 700;
     color: #fff;
     letter-spacing: -.3px;
   }
 
-  .mobile-top-bar-actions {
+  .mobile-drawer-nav {
+    flex: 1;
+    padding: 10px 8px;
     display: flex;
-    gap: 8px;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .mobile-drawer-item {
+    display: flex;
     align-items: center;
+    gap: 14px;
+    padding: 13px 16px;
+    border-radius: 10px;
+    border: none;
+    background: none;
+    color: rgba(255,255,255,.72);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    min-height: 48px;
+    transition: background .14s, color .14s;
+    position: relative;
+  }
+  .mobile-drawer-item:active {
+    background: rgba(255,255,255,.08);
+  }
+  .mobile-drawer-item.active {
+    background: rgba(99,102,241,.18);
+    color: var(--accent);
+  }
+
+  .mobile-drawer-icon {
+    font-size: 19px;
+    width: 26px;
+    text-align: center;
+    flex-shrink: 0;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-drawer-badge {
+    position: absolute;
+    top: -2px;
+    right: -4px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--danger);
+    border: 1px solid var(--bg-sidebar);
+  }
+
+  .mobile-drawer-divider {
+    height: 1px;
+    background: rgba(255,255,255,.07);
+    margin: 6px 12px;
   }
 
   /* ── FAB (floating action button) ────────────────────────────────────── */
   .mobile-fab {
     position: fixed;
-    bottom: 74px;
+    bottom: 20px;
     right: 18px;
     width: 52px;
     height: 52px;
@@ -4325,6 +4462,7 @@ body {
     box-shadow: var(--shadow-lg);
     z-index: 150;
     transition: transform .15s, box-shadow .15s;
+    margin-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .mobile-fab:active { transform: scale(.93); box-shadow: var(--shadow-md); }
@@ -4334,5 +4472,6 @@ body {
 @media (min-width: 769px) {
   .mobile-back-btn,
   .mobile-top-bar,
+  .mobile-burger-btn,
   .mobile-fab { display: none; }
 }

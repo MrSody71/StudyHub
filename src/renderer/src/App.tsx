@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguStatus, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort } from './types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguStatus, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort, AppView } from './types'
 import Dashboard from './components/Dashboard'
-import BottomNav from './components/BottomNav'
+import MobileDrawer from './components/MobileDrawer'
 import SubjectList from './components/SubjectList'
 import SemesterManager from './components/SemesterManager'
 import TaskList from './components/TaskList'
@@ -20,7 +20,6 @@ import { initSupabase, getSupabase, clearSupabase } from './lib/supabase'
 import { pushRow, pushDelete, pushTaskTags, pullAll, uploadLocalData, runSync, type SyncStatus } from './lib/sync'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
-type AppView    = 'dashboard' | 'tasks' | 'schedule' | 'calendar' | 'timer'
 type SubjectTab = 'tasks' | 'grades' | 'notes'
 
 async function unwrap<T>(p: Promise<IpcResult<T>>): Promise<T> {
@@ -52,6 +51,7 @@ export default function App() {
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
   const [selectedTaskId, setSelectedTaskId]       = useState<number | null>(null)
   const [showSettings, setShowSettings]     = useState(false)
+  const [showDrawer, setShowDrawer]         = useState(false)
   const [tulguStatus, setTulguStatus]       = useState<TulguStatus>({
     isSyncing: false, lastUpdated: null, lastError: null, lastErrorAt: null
   })
@@ -868,8 +868,23 @@ export default function App() {
 
       {/* ── Mobile top bar (hidden on desktop) ────────────────────────────── */}
       <div className="mobile-top-bar">
-        <span style={{ fontSize: 18 }}>📚</span>
-        <span className="mobile-top-bar-title">StudyHub</span>
+        <button
+          className="mobile-burger-btn"
+          onClick={() => setShowDrawer(true)}
+          aria-label="Открыть меню"
+        >
+          <span className="mobile-burger-line" />
+          <span className="mobile-burger-line" />
+          <span className="mobile-burger-line" />
+        </button>
+        <span className="mobile-top-bar-title">
+          {view === 'dashboard' ? 'Дашборд'
+           : view === 'subjects' ? 'Предметы'
+           : view === 'tasks'    ? (selectedSubject ? selectedSubject.name : 'Задания')
+           : view === 'schedule' ? 'Расписание'
+           : view === 'calendar' ? 'Календарь'
+           : 'Таймер'}
+        </span>
         <div className="mobile-top-bar-actions">
           {supaUser && (
             <CloudStatus
@@ -878,10 +893,6 @@ export default function App() {
               onClick={() => void handleManualSync()}
             />
           )}
-          <button
-            style={{ background: 'none', border: 'none', color: 'var(--text-sidebar)', fontSize: 18, cursor: 'pointer', padding: '4px 6px', minHeight: 44, display: 'flex', alignItems: 'center' }}
-            onClick={() => setShowSettings(true)}
-          >⚙</button>
         </div>
       </div>
 
@@ -960,6 +971,37 @@ export default function App() {
           <button className="settings-btn" onClick={() => setShowSettings(true)}>⚙ Настройки</button>
         </div>
       </div>
+
+      {/* ── Mobile drawer navigation ─────────────────────────────────────── */}
+      <MobileDrawer
+        open={showDrawer}
+        view={view}
+        pomRunning={pomState.status === 'running'}
+        onNavigate={(v) => { setView(v); setSelectedTaskId(null) }}
+        onSettings={() => setShowSettings(true)}
+        onClose={() => setShowDrawer(false)}
+      />
+
+      {/* ── Subjects view (mobile — replaces sidebar subject list) ────────── */}
+      {view === 'subjects' && (
+        <div className="full-content-panel mobile-subjects-panel">
+          <SubjectList
+            subjects={subjects}
+            archivedSubjects={archivedSubjects}
+            selectedSubjectId={selectedSubjectId}
+            semesters={semesters}
+            gradeStats={gradeStats}
+            gradeScale={gradeScale}
+            subjectSort={subjectSort}
+            onSelect={(id) => { setSelectedSubjectId(id); setView('tasks') }}
+            onCreate={handleCreateSubject}
+            onUpdate={handleUpdateSubject}
+            onDelete={handleDeleteSubject}
+            onArchive={handleArchiveSubject}
+            onSortChange={handleSubjectSortChange}
+          />
+        </div>
+      )}
 
       {/* ── Dashboard view ───────────────────────────────────────────────── */}
       {view === 'dashboard' && (
@@ -1201,12 +1243,6 @@ export default function App() {
         />
       )}
 
-      {/* ── Bottom navigation (mobile only) ───────────────────────────────── */}
-      <BottomNav
-        view={view}
-        onViewChange={(v) => { setView(v); setSelectedTaskId(null) }}
-        pomRunning={pomState.status === 'running'}
-      />
     </div>
   )
 }
