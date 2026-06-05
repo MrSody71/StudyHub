@@ -3936,25 +3936,26 @@ body {
 .auth-overlay {
   position: fixed;
   inset: 0;
-  background: var(--bg-overlay);
+  background: linear-gradient(135deg, #0f1117 0%, #1a1b2e 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10000;
-  backdrop-filter: blur(4px);
 }
 
 .auth-card {
   background: var(--bg-modal);
-  border-radius: 16px;
-  padding: 32px 28px;
-  width: 360px;
+  border-radius: var(--radius-xl);
+  padding: 36px 32px;
+  width: 380px;
   max-height: 90vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.25);
+  gap: 18px;
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border);
+  animation: modal-in .2s ease;
 }
 
 .auth-logo {
@@ -3965,13 +3966,10 @@ body {
   margin-bottom: 4px;
 }
 
-.auth-logo-icon {
-  font-size: 32px;
-  line-height: 1;
-}
+.auth-logo-icon { font-size: 30px; line-height: 1; }
 
 .auth-logo-text {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 800;
   color: var(--text-primary);
   letter-spacing: -.5px;
@@ -3980,38 +3978,37 @@ body {
 .auth-tabs {
   display: flex;
   background: var(--bg-hover);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 3px;
-  gap: 2px;
+  gap: 3px;
 }
 
 .auth-tab {
   flex: 1;
-  padding: 7px 0;
+  padding: 8px 0;
   border: none;
   background: none;
-  border-radius: 6px;
-  font-size: 13.5px;
+  border-radius: 8px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   color: var(--text-secondary);
-  transition: background var(--transition), color var(--transition);
+  transition: background var(--transition), color var(--transition), box-shadow var(--transition);
 }
 
 .auth-tab.active {
   background: var(--bg-modal);
   color: var(--text-primary);
-  box-shadow: 0 1px 4px rgba(0,0,0,.10);
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0,0,0,.12);
 }
 
-.auth-tab:hover:not(.active) {
-  color: var(--text-primary);
-}
+.auth-tab:hover:not(.active) { color: var(--text-primary); }
 
 .auth-error {
-  padding: 9px 12px;
+  padding: 10px 14px;
   background: var(--danger-light);
-  border: 1px solid var(--danger);
+  border: 1px solid rgba(239,68,68,.3);
   border-radius: var(--radius-sm);
   font-size: 13px;
   color: var(--danger);
@@ -4021,8 +4018,8 @@ body {
 .auth-divider {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 12px;
+  gap: 12px;
+  font-size: 11.5px;
   color: var(--text-tertiary);
 }
 
