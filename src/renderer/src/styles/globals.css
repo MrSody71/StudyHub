@@ -4475,3 +4475,33 @@ body {
   .mobile-burger-btn,
   .mobile-fab { display: none; }
 }
+
+/* ── Wallet view ─────────────────────────────────────────────────────────── */
+
+.wallet-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+.wallet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 768px) {
+  .wallet-view {
+    padding: 12px 16px;
+  }
+
+  .wallet-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

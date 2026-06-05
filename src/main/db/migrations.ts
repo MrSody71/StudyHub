@@ -307,6 +307,62 @@ const migrations: Migration[] = [
       db.exec(`ALTER TABLE subjects ADD COLUMN moodle_course_id TEXT;`)
       db.exec(`ALTER TABLE tasks    ADD COLUMN moodle_assignment_id TEXT;`)
     }
+  },
+  {
+    // Wallet / expense tracker:
+    // - wallet_categories: user-defined income/expense categories with icon+color
+    // - wallet_transactions: individual income or expense entries
+    version: 16,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS wallet_categories (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          name       TEXT    NOT NULL,
+          icon       TEXT    NOT NULL DEFAULT '💰',
+          color      TEXT    NOT NULL DEFAULT '#6366f1',
+          type       TEXT    NOT NULL DEFAULT 'expense'
+                     CHECK (type IN ('income','expense')),
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_deleted INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0,1)),
+          updated_at TEXT    NOT NULL DEFAULT '2020-01-01T00:00:00.000Z',
+          created_at TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS wallet_transactions (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          category_id INTEGER REFERENCES wallet_categories(id) ON DELETE SET NULL,
+          amount      REAL    NOT NULL CHECK (amount > 0),
+          type        TEXT    NOT NULL DEFAULT 'expense'
+                      CHECK (type IN ('income','expense')),
+          note        TEXT,
+          date        TEXT    NOT NULL DEFAULT (date('now','localtime')),
+          is_deleted  INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0,1)),
+          updated_at  TEXT    NOT NULL DEFAULT '2020-01-01T00:00:00.000Z',
+          created_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_wallet_tx_date     ON wallet_transactions(date);
+        CREATE INDEX IF NOT EXISTS idx_wallet_tx_category ON wallet_transactions(category_id);
+      `)
+
+      // Seed default categories
+      db.exec(`
+        INSERT OR IGNORE INTO wallet_categories (id, name, icon, color, type, sort_order, updated_at) VALUES
+          (1,  'Еда',          '🍔', '#f97316', 'expense', 1,  '2020-01-01T00:00:00.000Z'),
+          (2,  'Транспорт',    '🚌', '#3b82f6', 'expense', 2,  '2020-01-01T00:00:00.000Z'),
+          (3,  'Развлечения',  '🎮', '#a855f7', 'expense', 3,  '2020-01-01T00:00:00.000Z'),
+          (4,  'Учёба',        '📚', '#6366f1', 'expense', 4,  '2020-01-01T00:00:00.000Z'),
+          (5,  'Жильё',        '🏠', '#22c55e', 'expense', 5,  '2020-01-01T00:00:00.000Z'),
+          (6,  'Одежда',       '👕', '#ec4899', 'expense', 6,  '2020-01-01T00:00:00.000Z'),
+          (7,  'Здоровье',     '💊', '#14b8a6', 'expense', 7,  '2020-01-01T00:00:00.000Z'),
+          (8,  'Связь',        '📱', '#06b6d4', 'expense', 8,  '2020-01-01T00:00:00.000Z'),
+          (9,  'Другое',       '🛒', '#94a3b8', 'expense', 9,  '2020-01-01T00:00:00.000Z'),
+          (10, 'Стипендия',    '🎓', '#eab308', 'income',  1,  '2020-01-01T00:00:00.000Z'),
+          (11, 'Работа',       '💼', '#3b82f6', 'income',  2,  '2020-01-01T00:00:00.000Z'),
+          (12, 'Подарок',      '🎁', '#ec4899', 'income',  3,  '2020-01-01T00:00:00.000Z'),
+          (13, 'Прочее',       '💳', '#94a3b8', 'income',  4,  '2020-01-01T00:00:00.000Z');
+      `)
+    }
   }
 ]
 

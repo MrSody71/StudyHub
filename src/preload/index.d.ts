@@ -1,4 +1,4 @@
-import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguConfig, TulguStatus, TulguSyncResult, StudySession, SessionStats, Grade, SubjectGradeStat, Note, DashboardData, Semester, MoodleStatus, MoodleCourse, MoodleSyncProgress, MoodleSyncResult } from '../renderer/src/types'
+import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguConfig, TulguStatus, TulguSyncResult, StudySession, SessionStats, Grade, SubjectGradeStat, Note, DashboardData, Semester, MoodleStatus, MoodleCourse, MoodleSyncProgress, MoodleSyncResult, WalletCategory, WalletTransaction, WalletStats } from '../renderer/src/types'
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string }
 
@@ -131,6 +131,18 @@ declare global {
         onUpdateDownloaded:   (cb: (info: { version: string }) => void) => void
         onError:              (cb: (msg: string) => void) => void
         removeAllListeners:   (channel: string) => void
+      }
+      wallet: {
+        getCategories:    ()                                                                                    => Promise<IpcResult<WalletCategory[]>>
+        createCategory:   (data: Omit<WalletCategory, 'id' | 'created_at' | 'is_deleted' | 'updated_at'>)    => Promise<IpcResult<WalletCategory>>
+        updateCategory:   (id: number, data: Partial<Omit<WalletCategory, 'id' | 'created_at'>>)              => Promise<IpcResult<WalletCategory>>
+        deleteCategory:   (id: number)                                                                         => Promise<IpcResult<null>>
+        getTransactions:  (filter?: { dateFrom?: string; dateTo?: string; type?: string; limit?: number })     => Promise<IpcResult<WalletTransaction[]>>
+        createTransaction:(data: Pick<WalletTransaction, 'category_id' | 'amount' | 'type' | 'note' | 'date'>) => Promise<IpcResult<WalletTransaction>>
+        updateTransaction:(id: number, data: Partial<Pick<WalletTransaction, 'category_id' | 'amount' | 'type' | 'note' | 'date'>>) => Promise<IpcResult<WalletTransaction>>
+        deleteTransaction:(id: number)                                                                         => Promise<IpcResult<null>>
+        getStats:         (filter?: { dateFrom?: string; dateTo?: string })                                    => Promise<IpcResult<WalletStats>>
+        exportCsv:        (filter?: { dateFrom?: string; dateTo?: string })                                    => Promise<IpcResult<string>>
       }
     }
   }

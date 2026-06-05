@@ -15,6 +15,7 @@ import type {
   BatchImportEntry, BatchImportResult, StudySession, SessionStats,
   Grade, SubjectGradeStat, Note, DashboardData, Semester,
   TulguConfig, TulguStatus, TulguSyncResult,
+  WalletCategory, WalletTransaction, WalletStats,
 } from '@renderer/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1170,6 +1171,197 @@ async function dashboardGetData(semesterId?: number | null): Promise<IpcResult<D
   })
 }
 
+// ── Wallet ────────────────────────────────────────────────────────────────────
+
+async function walletGetCategories(): Promise<IpcResult<WalletCategory[]>> {
+  return wrap(async () => {
+    const userId = await uid()
+    const { data, error } = await getSupabase()!
+      .from('wallet_categories')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_deleted', false)
+      .order('type').order('sort_order').order('name')
+    if (error) throw error
+    return normAll<WalletCategory>(data as Record<string, unknown>[])
+  })
+}
+
+async function walletCreateCategory(data: Omit<WalletCategory, 'id' | 'created_at' | 'is_deleted' | 'updated_at'>): Promise<IpcResult<WalletCategory>> {
+  return wrap(async () => {
+    const userId = await uid()
+    const { data: row, error } = await getSupabase()!
+      .from('wallet_categories')
+      .insert({ ...data, user_id: userId, updated_at: new Date().toISOString() })
+      .select()
+      .single()
+    if (error) throw error
+    return norm<WalletCategory>(row as Record<string, unknown>)
+  })
+}
+
+async function walletUpdateCategory(id: number, data: Partial<Omit<WalletCategory, 'id' | 'created_at'>>): Promise<IpcResult<WalletCategory>> {
+  return wrap(async () => {
+    const { data: row, error } = await getSupabase()!
+      .from('wallet_categories')
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return norm<WalletCategory>(row as Record<string, unknown>)
+  })
+}
+
+async function walletDeleteCategory(id: number): Promise<IpcResult<null>> {
+  return wrap(async () => {
+    const { error } = await getSupabase()!
+      .from('wallet_categories')
+      .update({ is_deleted: true, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) throw error
+    return null
+  })
+}
+
+async function walletGetTransactions(filter?: { dateFrom?: string; dateTo?: string; type?: string; limit?: number }): Promise<IpcResult<WalletTransaction[]>> {
+  return wrap(async () => {
+    const userId = await uid()
+    let q = getSupabase()!
+      .from('wallet_transactions')
+      .select('*, wallet_categories(name, icon, color)')
+      .eq('user_id', userId)
+      .eq('is_deleted', false)
+      .order('date', { ascending: false })
+      .order('id',   { ascending: false })
+    if (filter?.dateFrom) q = q.gte('date', filter.dateFrom)
+    if (filter?.dateTo)   q = q.lte('date', filter.dateTo)
+    if (filter?.type)     q = q.eq('type', filter.type)
+    if (filter?.limit)    q = q.limit(filter.limit)
+    const { data, error } = await q
+    if (error) throw error
+    return (data ?? []).map((r: Record<string, unknown>) => {
+      const cat = r['wallet_categories'] as { name: string; icon: string; color: string } | null
+      return norm<WalletTransaction>({
+        ...r,
+        category_name:  cat?.name  ?? null,
+        category_icon:  cat?.icon  ?? null,
+        category_color: cat?.color ?? null,
+      })
+    })
+  })
+}
+
+async function walletCreateTransaction(data: Pick<WalletTransaction, 'category_id' | 'amount' | 'type' | 'note' | 'date'>): Promise<IpcResult<WalletTransaction>> {
+  return wrap(async () => {
+    const userId = await uid()
+    const { data: row, error } = await getSupabase()!
+      .from('wallet_transactions')
+      .insert({ ...data, user_id: userId, updated_at: new Date().toISOString() })
+      .select('*, wallet_categories(name, icon, color)')
+      .single()
+    if (error) throw error
+    const r = row as Record<string, unknown>
+    const cat = r['wallet_categories'] as { name: string; icon: string; color: string } | null
+    return norm<WalletTransaction>({ ...r, category_name: cat?.name ?? null, category_icon: cat?.icon ?? null, category_color: cat?.color ?? null })
+  })
+}
+
+async function walletUpdateTransaction(id: number, data: Partial<Pick<WalletTransaction, 'category_id' | 'amount' | 'type' | 'note' | 'date'>>): Promise<IpcResult<WalletTransaction>> {
+  return wrap(async () => {
+    const { data: row, error } = await getSupabase()!
+      .from('wallet_transactions')
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('*, wallet_categories(name, icon, color)')
+      .single()
+    if (error) throw error
+    const r = row as Record<string, unknown>
+    const cat = r['wallet_categories'] as { name: string; icon: string; color: string } | null
+    return norm<WalletTransaction>({ ...r, category_name: cat?.name ?? null, category_icon: cat?.icon ?? null, category_color: cat?.color ?? null })
+  })
+}
+
+async function walletDeleteTransaction(id: number): Promise<IpcResult<null>> {
+  return wrap(async () => {
+    const { error } = await getSupabase()!
+      .from('wallet_transactions')
+      .update({ is_deleted: true, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) throw error
+    return null
+  })
+}
+
+async function walletGetStats(filter?: { dateFrom?: string; dateTo?: string }): Promise<IpcResult<WalletStats>> {
+  return wrap(async () => {
+    const userId = await uid()
+    let q = getSupabase()!
+      .from('wallet_transactions')
+      .select('amount, type, date, category_id, wallet_categories(name, icon, color)')
+      .eq('user_id', userId)
+      .eq('is_deleted', false)
+    if (filter?.dateFrom) q = q.gte('date', filter.dateFrom)
+    if (filter?.dateTo)   q = q.lte('date', filter.dateTo)
+    const { data, error } = await q
+    if (error) throw error
+
+    const rows = (data ?? []) as unknown as Array<{
+      amount: number; type: string; date: string; category_id: number | null
+      wallet_categories: { name: string; icon: string; color: string } | null
+    }>
+
+    let totalIncome = 0, totalExpense = 0
+    const catMap = new Map<string, { category_id: number | null; category_name: string; category_icon: string; category_color: string; type: string; total: number; count: number }>()
+    const dayMap = new Map<string, { income: number; expense: number }>()
+
+    for (const r of rows) {
+      if (r.type === 'income')  totalIncome  += r.amount
+      else                      totalExpense += r.amount
+
+      const catKey = `${r.category_id ?? 'null'}_${r.type}`
+      const cat = catMap.get(catKey) ?? {
+        category_id:    r.category_id,
+        category_name:  r.wallet_categories?.name  ?? 'Без категории',
+        category_icon:  r.wallet_categories?.icon  ?? '💳',
+        category_color: r.wallet_categories?.color ?? '#94a3b8',
+        type:           r.type,
+        total: 0, count: 0,
+      }
+      cat.total += r.amount
+      cat.count++
+      catMap.set(catKey, cat)
+
+      const day = dayMap.get(r.date) ?? { income: 0, expense: 0 }
+      if (r.type === 'income') day.income += r.amount
+      else                     day.expense += r.amount
+      dayMap.set(r.date, day)
+    }
+
+    return {
+      totalIncome,
+      totalExpense,
+      balance: totalIncome - totalExpense,
+      byCategory: Array.from(catMap.values()).sort((a, b) => b.total - a.total) as WalletStats['byCategory'],
+      byDay: Array.from(dayMap.entries())
+        .map(([date, v]) => ({ date, ...v }))
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    } satisfies WalletStats
+  })
+}
+
+async function walletExportCsv(filter?: { dateFrom?: string; dateTo?: string }): Promise<IpcResult<string>> {
+  const txResult = await walletGetTransactions(filter)
+  if (!txResult.success) return txResult
+  const header = 'date,type,amount,category,note\n'
+  const lines = txResult.data.map((r) => {
+    const note = (r.note ?? '').replace(/"/g, '""')
+    const cat  = (r.category_name ?? '').replace(/"/g, '""')
+    return `${r.date},${r.type},${r.amount},"${cat}","${note}"`
+  })
+  return { success: true, data: header + lines.join('\n') }
+}
+
 // ── Notifications ─────────────────────────────────────────────────────────────
 
 async function notificationsShow(title: string, body: string): Promise<IpcResult<null>> {
@@ -1414,6 +1606,18 @@ export function buildWebApi(): Window['api'] {
       onUpdateDownloaded:   (_cb) => { /* no-op */ },
       onError:              (_cb) => { /* no-op */ },
       removeAllListeners:   (_ch) => { /* no-op */ },
+    },
+    wallet: {
+      getCategories:    walletGetCategories,
+      createCategory:   walletCreateCategory,
+      updateCategory:   walletUpdateCategory,
+      deleteCategory:   walletDeleteCategory,
+      getTransactions:  walletGetTransactions,
+      createTransaction:walletCreateTransaction,
+      updateTransaction:walletUpdateTransaction,
+      deleteTransaction:walletDeleteTransaction,
+      getStats:         walletGetStats,
+      exportCsv:        walletExportCsv,
     },
   }
 }

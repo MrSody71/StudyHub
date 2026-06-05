@@ -2,7 +2,7 @@ export type TaskStatus   = 'not_started' | 'in_progress' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high'
 export type Theme        = 'light' | 'dark'
 export type SubjectSort  = 'alpha' | 'semester' | 'grade'
-export type AppView      = 'dashboard' | 'subjects' | 'tasks' | 'schedule' | 'calendar' | 'timer'
+export type AppView      = 'dashboard' | 'subjects' | 'tasks' | 'schedule' | 'calendar' | 'timer' | 'wallet'
 
 export interface Semester {
   id:         number
@@ -249,6 +249,62 @@ export interface MoodleSyncResult {
   assignmentsCreated: number
   filesDownloaded:    number
   filesSkipped:       number
+}
+
+// ── Wallet ────────────────────────────────────────────────────────────────────
+
+export type WalletTransactionType = 'income' | 'expense'
+
+export interface WalletCategory {
+  id:         number
+  name:       string
+  icon:       string
+  color:      string
+  type:       WalletTransactionType
+  sort_order: number
+  is_deleted: number   // 0 | 1
+  updated_at: string
+  created_at: string
+}
+
+export interface WalletTransaction {
+  id:          number
+  category_id: number | null
+  amount:      number
+  type:        WalletTransactionType
+  note:        string | null
+  date:        string   // 'YYYY-MM-DD'
+  is_deleted:  number   // 0 | 1
+  updated_at:  string
+  created_at:  string
+  // Joined from wallet_categories
+  category_name?:  string | null
+  category_icon?:  string | null
+  category_color?: string | null
+}
+
+export interface WalletCategoryStat {
+  category_id:    number | null
+  category_name:  string
+  category_icon:  string
+  category_color: string
+  type:           WalletTransactionType
+  total:          number
+  count:          number
+}
+
+export interface WalletDayStat {
+  date:    string
+  income:  number
+  expense: number
+}
+
+export interface WalletStats {
+  totalIncome:  number
+  totalExpense: number
+  balance:      number
+  byCategory:   WalletCategoryStat[]
+  byDay:        WalletDayStat[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

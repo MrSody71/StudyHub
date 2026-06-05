@@ -14,6 +14,7 @@ import MonthCalendar from './components/MonthCalendar'
 import PomodoroTimer from './components/PomodoroTimer'
 import StudyStats from './components/StudyStats'
 import SettingsPanel from './components/SettingsPanel'
+import WalletView from './components/WalletView'
 import AuthScreen from './components/AuthScreen'
 import CloudStatus from './components/CloudStatus'
 import { usePomodoro } from './hooks/usePomodoro'
@@ -956,6 +957,9 @@ export default function App() {
               <span className="pom-running-badge" />
             )}
           </button>
+          <button className={`view-nav-btn${view === 'wallet' ? ' active' : ''}`} onClick={() => setView('wallet')}>
+            <span className="view-nav-icon">💳</span> Кошелёк
+          </button>
 
         </div>
 
@@ -1189,6 +1193,13 @@ export default function App() {
             tasks={tasks.length > 0 ? tasks : allDeadlineTasks}
           />
           <StudyStats sessionVersion={sessionVersion} />
+        </div>
+      )}
+
+      {/* ── Wallet view ───────────────────────────────────────────────────── */}
+      {view === 'wallet' && (
+        <div className="full-content-panel">
+          <WalletView />
         </div>
       )}
 
