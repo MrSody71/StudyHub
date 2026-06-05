@@ -129,6 +129,7 @@ body {
   display: flex;
   height: 100vh;
   overflow: hidden;
+  animation: loading-fadein 0.3s ease both;
 }
 
 /* ── Update banner ─────────────────────────────────────────────────────── */
@@ -4502,8 +4503,8 @@ body {
   align-items:     center;
   justify-content: center;
   gap:             36px;
-  background:      var(--bg-sidebar);
-  transition:      opacity 0.4s ease;
+  /* Hardcoded so it's always opaque before CSS variables resolve */
+  background:      #0f172a;
 }
 
 .loading-logo {
@@ -4525,7 +4526,7 @@ body {
 .loading-logo-name {
   font-size:      26px;
   font-weight:    700;
-  color:          var(--text-primary);
+  color:          #f1f5f9;
   letter-spacing: -0.02em;
 }
 
@@ -4539,7 +4540,7 @@ body {
   width:         9px;
   height:        9px;
   border-radius: 50%;
-  background:    var(--accent);
+  background:    #6366f1;
   animation:     loading-pulse 1.5s ease-in-out infinite;
 }
 

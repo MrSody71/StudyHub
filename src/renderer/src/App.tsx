@@ -827,9 +827,7 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={{ userProfile, loading: authLoading }}>
-    {/* Loading overlay — covers everything while session is being checked */}
-    <LoadingScreen visible={authLoading} />
-    <div className="app">
+    {authLoading ? <LoadingScreen /> : <div className="app">
       {/* ── Update modal ───────────────────────────────────────────────────── */}
       {showUpdateModal && updateVersion && (
         <div className="modal-overlay" onClick={() => { if (updateStage !== 'downloading') setShowUpdateModal(false) }}>
@@ -1297,7 +1295,7 @@ export default function App() {
         />
       )}
 
-    </div>
+    </div>}
     </AuthContext.Provider>
   )
 }

@@ -1,34 +1,6 @@
-import { useState, useEffect } from 'react'
-
-interface Props {
-  /** When false the screen fades out and unmounts */
-  visible: boolean
-}
-
-export default function LoadingScreen({ visible }: Props) {
-  const [mounted, setMounted] = useState(true)
-
-  useEffect(() => {
-    if (!visible) {
-      // Keep mounted long enough for the CSS fade-out to complete
-      const t = setTimeout(() => setMounted(false), 450)
-      return () => clearTimeout(t)
-    }
-    setMounted(true)
-  }, [visible])
-
-  if (!mounted) return null
-
+export default function LoadingScreen() {
   return (
-    <div
-      className="loading-screen"
-      style={{
-        opacity:       visible ? 1 : 0,
-        pointerEvents: visible ? 'auto' : 'none',
-      }}
-      aria-live="polite"
-      aria-label="Загрузка приложения"
-    >
+    <div className="loading-screen" aria-label="Загрузка приложения">
       {/* Logo */}
       <div className="loading-logo">
         <span className="loading-logo-icon">📚</span>
