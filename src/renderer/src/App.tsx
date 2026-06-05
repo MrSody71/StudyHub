@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguStatus, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort } from './types'
 import Dashboard from './components/Dashboard'
+import BottomNav from './components/BottomNav'
 import SubjectList from './components/SubjectList'
 import SemesterManager from './components/SemesterManager'
 import TaskList from './components/TaskList'
@@ -867,6 +868,25 @@ export default function App() {
         </div>
       )}
 
+      {/* ── Mobile top bar (hidden on desktop) ────────────────────────────── */}
+      <div className="mobile-top-bar">
+        <span style={{ fontSize: 18 }}>📚</span>
+        <span className="mobile-top-bar-title">StudyHub</span>
+        <div className="mobile-top-bar-actions">
+          {supaUser && (
+            <CloudStatus
+              status={syncStatus}
+              lastSyncAt={lastSyncAt}
+              onClick={() => void handleManualSync()}
+            />
+          )}
+          <button
+            style={{ background: 'none', border: 'none', color: 'var(--text-sidebar)', fontSize: 18, cursor: 'pointer', padding: '4px 6px', minHeight: 44, display: 'flex', alignItems: 'center' }}
+            onClick={() => setShowSettings(true)}
+          >⚙</button>
+        </div>
+      </div>
+
       <div className="sidebar">
         <div className="sidebar-header">
           <span className="app-logo">📚</span>
@@ -1054,6 +1074,9 @@ export default function App() {
 
           {selectedTask && (
             <div className="detail-panel">
+              <button className="mobile-back-btn" onClick={() => setSelectedTaskId(null)}>
+                ← Назад к заданиям
+              </button>
               <TaskDetail
                 task={selectedTask}
                 attachments={attachments}
@@ -1213,6 +1236,13 @@ export default function App() {
           onClose={() => setShowSemesterMgr(false)}
         />
       )}
+
+      {/* ── Bottom navigation (mobile only) ───────────────────────────────── */}
+      <BottomNav
+        view={view}
+        onViewChange={(v) => { setView(v); setSelectedTaskId(null) }}
+        pomRunning={pomState.status === 'running'}
+      />
     </div>
   )
 }
