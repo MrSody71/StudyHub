@@ -25,7 +25,7 @@ type SubjectTab = 'tasks' | 'grades' | 'notes'
 
 async function unwrap<T>(p: Promise<IpcResult<T>>): Promise<T> {
   const r = await p
-  if (!r.success) throw new Error(r.error)
+  if (!r.success) throw Object.assign(new Error(r.error), { isAuthError: r.error?.includes('авторизован') })
   return r.data
 }
 
@@ -213,17 +213,17 @@ export default function App() {
 
   async function loadSubjects() {
     try { setSubjects(await unwrap(window.api.subjects.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadArchivedSubjects() {
     try { setArchivedSubjects(await unwrap(window.api.subjects.getAll({ archived: true }))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadSemesters() {
     try { setSemesters(await unwrap(window.api.semesters.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadTasks(subjectId: number) {
@@ -236,42 +236,42 @@ export default function App() {
         autoSelectTaskRef.current = null
         if (loaded.some((t) => t.id === id)) setSelectedTaskId(id)
       }
-    } catch (e) { setError(String(e)) }
+    } catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadAllDeadlineTasks() {
     try { setAllDeadlineTasks(await unwrap(window.api.tasks.getAllWithDeadline())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadTags() {
     try { setTags(await unwrap(window.api.tags.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadScheduleEntries() {
     try { setScheduleEntries(await unwrap(window.api.schedule.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadGrades(subjectId: number) {
     try { setGrades(await unwrap(window.api.grades.getBySubject(subjectId))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadGradeStats() {
     try { setGradeStats(await unwrap(window.api.grades.getSubjectStats())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadAllGrades() {
     try { setAllGrades(await unwrap(window.api.grades.getAll())) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadNotes(subjectId: number) {
     try { setNotes(await unwrap(window.api.notes.getBySubject(subjectId))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadGradeScale() {
@@ -297,12 +297,12 @@ export default function App() {
 
   async function loadAttachments(taskId: number) {
     try { setAttachments(await unwrap(window.api.attachments.getByTask(taskId))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   async function loadSubtasks(taskId: number) {
     try { setSubtasks(await unwrap(window.api.subtasks.getByTask(taskId))) }
-    catch (e) { setError(String(e)) }
+    catch (e) { if (!(e as { isAuthError?: boolean }).isAuthError) setError(String(e)) }
   }
 
   // ── Subject handlers ─────────────────────────────────────────────────────
