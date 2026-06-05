@@ -1274,6 +1274,9 @@ function syncGetLocalChanges(_since: string | null) {
 function syncReplaceTaskTags(_taskId: number, _tagIds: number[]) {
   return Promise.resolve(ok(null))
 }
+function syncGetAllTaskTags() {
+  return Promise.resolve(ok([] as { task_id: number; tag_id: number }[]))
+}
 
 // ── Build the full window.api object ─────────────────────────────────────────
 
@@ -1372,6 +1375,7 @@ export function buildWebApi(): Window['api'] {
       upsertRow:       syncUpsertRow,
       getLocalChanges: syncGetLocalChanges,
       replaceTaskTags: syncReplaceTaskTags,
+      getAllTaskTags:   syncGetAllTaskTags,
     },
     dialog: {
       openFile:      dialogOpenFile,
