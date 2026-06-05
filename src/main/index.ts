@@ -58,14 +58,21 @@ function createWindow(): void {
   }
 }
 
+const isDev = !app.isPackaged
+
+// In dev mode: allow 'unsafe-inline' scripts (Vite/React HMR preamble) and
+// ws:// for HMR WebSocket. In production these are not needed.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-eval'",
+  isDev
+    ? "script-src 'self' 'unsafe-eval' 'unsafe-inline'"
+    : "script-src 'self' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
   "font-src 'self' data:",
-  // Allow outbound fetch/WebSocket to Supabase, Moodle and TulGU
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://moodle.tulsu.ru https://tulsu.ru https://corsproxy.io",
+  isDev
+    ? "connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:* https://*.supabase.co wss://*.supabase.co https://moodle.tulsu.ru https://tulsu.ru https://corsproxy.io"
+    : "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://moodle.tulsu.ru https://tulsu.ru https://corsproxy.io",
 ].join('; ')
 
 app.whenReady().then(() => {

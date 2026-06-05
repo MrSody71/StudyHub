@@ -126,6 +126,12 @@ export function getLocalChangesSince(since: string | null): Record<string, unkno
   return result
 }
 
+/** Returns all local task_tags rows (task_id + tag_id only — no user_id in SQLite). */
+export function getLocalTaskTags(): { task_id: number; tag_id: number }[] {
+  const db = getDb()
+  return db.prepare('SELECT task_id, tag_id FROM task_tags').all() as { task_id: number; tag_id: number }[]
+}
+
 /** Replace all task_tags for a given task with the supplied tag ids (used on pull). */
 export function replaceTaskTagsFromRemote(taskId: number, tagIds: number[]): void {
   const db = getDb()
