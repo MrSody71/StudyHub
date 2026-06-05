@@ -19,6 +19,8 @@ interface Props {
   tulguStatus:          TulguStatus
   supaUser:             { email: string; id: string } | null
   supaConfigured:       boolean
+  supabaseUrl:          string
+  supabaseKey:          string
   syncStatus:           SyncStatus
   lastSyncAt:           string | null
   onThemeChange:        (t: Theme) => void
@@ -36,12 +38,18 @@ interface Props {
   onClose:              () => void
 }
 
-export default function SettingsPanel({ theme, tags, subjects, gradeScale, appVersion, checkStatus, tulguStatus, supaUser, supaConfigured, syncStatus, lastSyncAt, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onOpenTulguPanel, onSaveSupabaseConfig, onOpenAuth, onSignOut, onManualSync, onSubjectsChanged, onClose }: Props) {
+export default function SettingsPanel({ theme, tags, subjects, gradeScale, appVersion, checkStatus, tulguStatus, supaUser, supaConfigured, supabaseUrl, supabaseKey, syncStatus, lastSyncAt, onThemeChange, onGradeScaleChange, onCreateTag, onUpdateTag, onDeleteTag, onCheckForUpdates, onOpenTulguPanel, onSaveSupabaseConfig, onOpenAuth, onSignOut, onManualSync, onSubjectsChanged, onClose }: Props) {
   // ── Supabase config form ────────────────────────────────────────────────
-  const [supaUrl,     setSupaUrl]     = useState('')
-  const [supaKey,     setSupaKey]     = useState('')
+  const [supaUrl,     setSupaUrl]     = useState(supabaseUrl)
+  const [supaKey,     setSupaKey]     = useState(supabaseKey)
   const [supaSaving,  setSupaSaving]  = useState(false)
   const [supaExpanded, setSupaExpanded] = useState(false)
+
+  function handleExpandSupaForm() {
+    setSupaUrl(supabaseUrl)
+    setSupaKey(supabaseKey)
+    setSupaExpanded(true)
+  }
 
   async function handleSaveSupabase() {
     setSupaSaving(true)
@@ -332,7 +340,7 @@ export default function SettingsPanel({ theme, tags, subjects, gradeScale, appVe
                     </button>
                   )}
                   <button className="btn btn-secondary btn-sm"
-                    onClick={() => setSupaExpanded(true)}>
+                    onClick={handleExpandSupaForm}>
                     {supaConfigured ? 'Изменить настройки' : 'Настроить Supabase'}
                   </button>
                 </div>

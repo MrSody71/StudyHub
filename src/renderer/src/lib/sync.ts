@@ -11,7 +11,7 @@
  *   Supabase — used when a user logs in after having worked locally.
  */
 
-import { getSupabase } from './supabase'
+import { getSupabase, getActiveUserId } from './supabase'
 
 export type SyncStatus = 'idle' | 'syncing' | 'error'
 
@@ -31,6 +31,32 @@ const SYNC_TABLES = [
 
 type SyncTable = typeof SYNC_TABLES[number]
 
+// ── SQLite → Supabase type normalization ─────────────────────────────────────
+// SQLite stores booleans as integers (0/1). Supabase boolean columns require
+// actual JS booleans; Supabase timestamptz requires ISO-8601 strings.
+
+function normalizeBool(v: unknown): boolean | undefined {
+  if (v === undefined || v === null) return undefined
+  return !!v
+}
+
+function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...row }
+
+  // Boolean columns — convert 0/1 integers to true/false
+  const boolCols = [
+    'is_deleted', 'is_archived', 'is_active', 'is_done', 'is_folder',
+  ]
+  for (const col of boolCols) {
+    if (col in out) {
+      const v = normalizeBool(out[col])
+      if (v !== undefined) out[col] = v
+    }
+  }
+
+  return out
+}
+
 // ── Push helpers ─────────────────────────────────────────────────────────────
 
 /**
@@ -44,16 +70,23 @@ export function pushRow(
 ): void {
   const sb = getSupabase()
   if (!sb || !navigator.onLine) return
+
+  const payload = { ...normalizeRow(row), user_id: userId }
+
   sb.from(table)
-    .upsert({ ...row, user_id: userId }, { onConflict: 'id' })
+    .upsert(payload, { onConflict: 'user_id,id' })
     .then(({ error }) => {
-      if (error) console.warn('[sync] push error', table, error.message)
+      if (error) {
+        console.error(`[sync] pushRow error [${table}]:`, error.message,
+          '| code:', error.code, '| details:', error.details, '| hint:', error.hint)
+      } else {
+        console.log(`[sync] pushRow OK [${table}] id=${row.id}`)
+      }
     })
 }
 
 /**
  * Mark a row as soft-deleted in Supabase. Fire-and-forget.
- * The local DB has already done the soft-delete; we replicate it.
  */
 export function pushDelete(
   table: SyncTable,
@@ -64,15 +97,19 @@ export function pushDelete(
   if (!sb || !navigator.onLine) return
   const now = new Date().toISOString()
   sb.from(table)
-    .upsert({ id, user_id: userId, is_deleted: true, updated_at: now }, { onConflict: 'id' })
+    .upsert({ id, user_id: userId, is_deleted: true, updated_at: now }, { onConflict: 'user_id,id' })
     .then(({ error }) => {
-      if (error) console.warn('[sync] push delete error', table, id, error.message)
+      if (error) {
+        console.error(`[sync] pushDelete error [${table}] id=${id}:`, error.message,
+          '| code:', error.code, '| details:', error.details)
+      } else {
+        console.log(`[sync] pushDelete OK [${table}] id=${id}`)
+      }
     })
 }
 
 /**
  * Replace the full set of tag associations for a task in Supabase.
- * Called after setTaskTags — mirrors the local delete-all-then-reinsert pattern.
  */
 export function pushTaskTags(
   taskId: number,
@@ -88,7 +125,10 @@ export function pushTaskTags(
       .delete()
       .eq('task_id', taskId)
       .eq('user_id', userId)
-    if (delErr) { console.warn('[sync] push task_tags delete error', delErr.message); return }
+    if (delErr) {
+      console.error('[sync] pushTaskTags delete error:', delErr.message, '| details:', delErr.details)
+      return
+    }
     if (tagIds.length === 0) return
     const { error } = await sb.from('task_tags').upsert(
       tagIds.map((tagId) => ({
@@ -96,19 +136,16 @@ export function pushTaskTags(
         user_id: userId,
         created_at: now, updated_at: now,
       })),
-      { onConflict: 'task_id,tag_id' }
+      { onConflict: 'user_id,task_id,tag_id' }
     )
-    if (error) console.warn('[sync] push task_tags error', error.message)
+    if (error) {
+      console.error('[sync] pushTaskTags upsert error:', error.message, '| details:', error.details)
+    }
   })()
 }
 
 // ── Pull helpers ─────────────────────────────────────────────────────────────
 
-/**
- * Pull all rows from Supabase that changed after `since`.
- * Applies each row locally (conflict resolution is done in main process).
- * Also pulls task_tags when since is null (full initial sync).
- */
 export async function pullAll(
   userId: string,
   since: string | null,
@@ -116,33 +153,50 @@ export async function pullAll(
   const sb = getSupabase()
   if (!sb) return
 
+  // ── Session check ──
+  const activeId = await getActiveUserId()
+  if (!activeId) {
+    console.error('[sync] pullAll пропущен: нет активной сессии')
+    return
+  }
+
+  console.log(`[sync] pullAll userId=${userId} since=${since ?? 'full'}`)
+
   for (const table of SYNC_TABLES) {
     try {
       const base = sb.from(table).select('*').eq('user_id', userId)
       const q    = since ? base.gt('updated_at', since) : base
       const { data, error } = await q
-      if (error) { console.warn('[sync] pull error', table, error.message); continue }
-      if (!data || data.length === 0) continue
-
+      if (error) {
+        console.error(`[sync] pull error [${table}]:`, error.message,
+          '| code:', error.code, '| details:', error.details, '| hint:', error.hint)
+        continue
+      }
+      if (!data || data.length === 0) {
+        console.log(`[sync] pull [${table}]: 0 строк`)
+        continue
+      }
+      console.log(`[sync] pull [${table}]: ${data.length} строк`)
       for (const row of data) {
         const r = await window.api.sync.upsertRow(table, row)
-        if (!r.success) console.warn('[sync] upsert error', table, r.error)
+        if (!r.success) console.error(`[sync] upsertRow error [${table}]:`, r.error)
       }
     } catch (e) {
-      console.warn('[sync] pull exception', table, e)
+      console.error(`[sync] pull exception [${table}]:`, e)
     }
   }
 
-  // Pull task_tags: on full sync (no since) replace all; on incremental skip
-  // (we push task_tags immediately on setTaskTags, so they stay in sync)
+  // Pull task_tags on full sync
   if (!since) {
     try {
       const { data, error } = await sb
         .from('task_tags')
         .select('task_id, tag_id')
         .eq('user_id', userId)
-      if (!error && data && data.length > 0) {
-        // Group by task_id and replace locally
+      if (error) {
+        console.error('[sync] pull task_tags error:', error.message)
+      } else if (data && data.length > 0) {
+        console.log(`[sync] pull [task_tags]: ${data.length} строк`)
         const byTask = new Map<number, number[]>()
         for (const { task_id, tag_id } of data as { task_id: number; tag_id: number }[]) {
           if (!byTask.has(task_id)) byTask.set(task_id, [])
@@ -153,85 +207,128 @@ export async function pullAll(
         }
       }
     } catch (e) {
-      console.warn('[sync] pull task_tags exception', e)
+      console.error('[sync] pull task_tags exception:', e)
     }
   }
 }
 
-// ── Initial upload ───────────────────────────────────────────────────────────
+// ── pushAll ──────────────────────────────────────────────────────────────────
 
 /**
- * Push ALL local data to Supabase (used when user logs in after working locally).
- * Fetches every record from local DB and upserts it.
+ * Push ALL local rows from every sync table + task_tags to Supabase.
+ * Always sends the full local state — no timestamp filter.
+ * Called at the start of every runSync and after the initial login upload.
  */
-export async function uploadLocalData(userId: string): Promise<void> {
+export async function pushAll(userId: string): Promise<void> {
   const sb = getSupabase()
-  if (!sb) return
+  if (!sb || !navigator.onLine) {
+    console.warn('[sync] pushAll пропущен: нет Supabase клиента или нет сети')
+    return
+  }
 
+  console.log('[sync] pushAll start userId=', userId)
+
+  // ── Main tables ──
   const r = await window.api.sync.getLocalChanges(null)
   if (!r.success) {
-    console.warn('[sync] uploadLocalData: getLocalChanges failed', r.error)
+    console.error('[sync] pushAll: getLocalChanges failed', r.error)
     return
   }
 
   for (const [table, rows] of Object.entries(r.data)) {
-    if (!rows || (rows as unknown[]).length === 0) continue
-    const batch = (rows as Record<string, unknown>[]).map((row) => ({
-      ...row,
-      user_id:    userId,
-      // Convert SQLite integers to booleans for Supabase
-      is_deleted: !!row.is_deleted,
-      is_archived: row.is_archived !== undefined ? !!row.is_archived : undefined,
-      is_active:  row.is_active   !== undefined ? !!row.is_active   : undefined,
-      is_done:    row.is_done     !== undefined ? !!row.is_done     : undefined,
-      is_folder:  row.is_folder   !== undefined ? !!row.is_folder   : undefined,
-    }))
+    const arr = rows as Record<string, unknown>[]
+    if (!arr || arr.length === 0) {
+      console.log(`[sync] push [${table}]: 0 строк`)
+      continue
+    }
+    const batch = arr.map((row) => ({ ...normalizeRow(row), user_id: userId }))
+    console.log(`[sync] push [${table}]: ${batch.length} строк`)
     try {
-      const { error } = await sb.from(table).upsert(batch, { onConflict: 'id' })
-      if (error) console.warn('[sync] upload error', table, error.message)
+      const { error } = await sb
+        .from(table)
+        .upsert(batch as Record<string, unknown>[], { onConflict: 'user_id,id' })
+      if (error) {
+        console.error(`[sync] push error [${table}]:`, error.message,
+          '| code:', error.code, '| details:', error.details, '| hint:', error.hint)
+      } else {
+        console.log(`[sync] push OK [${table}]`)
+      }
     } catch (e) {
-      console.warn('[sync] upload exception', table, e)
+      console.error(`[sync] push exception [${table}]:`, e)
     }
   }
 
-  // Push task_tags (no id column, different handling)
-  // task_tags are uploaded implicitly via subject/task relationship —
-  // the user can retag after sync if needed.
+  // ── task_tags ──
+  try {
+    const ttR = await window.api.sync.getAllTaskTags()
+    if (!ttR.success) {
+      console.error('[sync] pushAll: getAllTaskTags failed', ttR.error)
+    } else {
+      const ttRows = ttR.data
+      if (ttRows && ttRows.length > 0) {
+        const now = new Date().toISOString()
+        const batch = ttRows.map(({ task_id, tag_id }) => ({
+          task_id, tag_id, user_id: userId,
+          created_at: now, updated_at: now,
+        }))
+        console.log(`[sync] push [task_tags]: ${batch.length} строк`)
+        const { error } = await sb
+          .from('task_tags')
+          .upsert(batch, { onConflict: 'user_id,task_id,tag_id' })
+        if (error) {
+          console.error('[sync] push error [task_tags]:', error.message,
+            '| code:', error.code, '| details:', error.details, '| hint:', error.hint)
+        } else {
+          console.log('[sync] push OK [task_tags]')
+        }
+      } else {
+        console.log('[sync] push [task_tags]: 0 строк')
+      }
+    }
+  } catch (e) {
+    console.error('[sync] push task_tags exception:', e)
+  }
+
+  console.log('[sync] pushAll done')
 }
 
-// ── Full sync (push local changes + pull remote changes) ─────────────────────
+// ── Initial upload ───────────────────────────────────────────────────────────
+
+/** Push all local data to Supabase — used when a user logs in after having worked locally. */
+export async function uploadLocalData(userId: string): Promise<void> {
+  // ── Session check ──
+  const activeId = await getActiveUserId()
+  if (!activeId) {
+    console.error('[sync] uploadLocalData пропущен: нет активной сессии')
+    return
+  }
+  console.log('[sync] uploadLocalData start, userId=', userId)
+  await pushAll(userId)
+}
+
+// ── Full sync (push local → pull remote) ─────────────────────────────────────
 
 export async function runSync(
   userId: string,
   lastSyncAt: string | null,
 ): Promise<string> {
-  // 1. Push local changes that happened since lastSyncAt
-  const changesR = await window.api.sync.getLocalChanges(lastSyncAt)
-  if (changesR.success) {
-    const sb = getSupabase()
-    if (sb && navigator.onLine) {
-      for (const [table, rows] of Object.entries(changesR.data)) {
-        if (!rows || (rows as unknown[]).length === 0) continue
-        const batch = (rows as Record<string, unknown>[]).map((row) => ({
-          ...row,
-          user_id:     userId,
-          is_deleted:  !!row.is_deleted,
-          is_archived: row.is_archived !== undefined ? !!row.is_archived : undefined,
-          is_active:   row.is_active   !== undefined ? !!row.is_active   : undefined,
-          is_done:     row.is_done     !== undefined ? !!row.is_done     : undefined,
-          is_folder:   row.is_folder   !== undefined ? !!row.is_folder   : undefined,
-        })).filter(r => r !== undefined)
-        try {
-          await sb.from(table).upsert(batch as Record<string, unknown>[], { onConflict: 'id' })
-        } catch { /* non-fatal */ }
-      }
-    }
+  console.log('[sync] runSync START userId=', userId, 'lastSyncAt=', lastSyncAt)
+
+  // ── Session check ──
+  const activeId = await getActiveUserId()
+  if (!activeId) {
+    console.error('[sync] runSync пропущен: нет активной сессии')
+    throw new Error('Нет активной сессии Supabase. Войдите в аккаунт.')
   }
 
-  // 2. Pull remote changes
+  // 1. Push all local data to Supabase
+  await pushAll(userId)
+
+  // 2. Pull remote changes (incremental if lastSyncAt is set, full otherwise)
   await pullAll(userId, lastSyncAt)
 
   const now = new Date().toISOString()
   await window.api.settings.set('sync.last_sync_at', now)
+  console.log('[sync] runSync DONE, now=', now)
   return now
 }

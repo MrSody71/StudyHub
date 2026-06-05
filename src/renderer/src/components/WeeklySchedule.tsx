@@ -9,6 +9,7 @@ interface Props {
   onUpdate:      (id: number, data: Partial<Omit<ScheduleEntry, 'id' | 'created_at'>>) => void
   onDelete:      (id: number) => void
   onBatchImport: (entries: BatchImportEntry[], replace: boolean) => Promise<BatchImportResult>
+  onRefresh:     () => void
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -61,7 +62,7 @@ function sameDay(a: Date, b: Date): boolean {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, onDelete, onBatchImport }: Props) {
+export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, onDelete, onBatchImport, onRefresh }: Props) {
   // ── Month navigation ───────────────────────────────────────────────────────
   const [monthDate, setMonthDate] = useState<Date>(() => {
     const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d
@@ -217,6 +218,13 @@ export default function WeeklySchedule({ entries, subjects, onCreate, onUpdate, 
         <div className="panel-header">
           <div className="panel-title">🗓 Расписание</div>
           <div className="panel-actions">
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={onRefresh}
+              title="Обновить расписание"
+            >
+              ↻ Обновить
+            </button>
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => setShowImport(true)}

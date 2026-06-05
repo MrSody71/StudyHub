@@ -68,6 +68,8 @@ export default function App() {
   const [showAuthScreen,   setShowAuthScreen]   = useState(false)
   const [showUploadDialog, setShowUploadDialog] = useState(false)
   const [supaConfigured,   setSupaConfigured]   = useState(false)
+  const [supabaseUrl,      setSupabaseUrl]      = useState('')
+  const [supabaseKey,      setSupabaseKey]      = useState('')
 
   // ── Sync state ───────────────────────────────────────────────────────────
   const [syncStatus,  setSyncStatus]  = useState<SyncStatus>('idle')
@@ -623,6 +625,9 @@ export default function App() {
     const url  = urlR.success ? urlR.data : null
     const key  = keyR.success ? keyR.data : null
 
+    if (url) setSupabaseUrl(url)
+    if (key) setSupabaseKey(key)
+
     if (!url || !key) {
       setAuthStatus('local')
       return
@@ -716,6 +721,8 @@ export default function App() {
   async function handleSaveSupabaseConfig(url: string, key: string) {
     await window.api.settings.set('supabase_url', url.trim())
     await window.api.settings.set('supabase_anon_key', key.trim())
+    setSupabaseUrl(url.trim())
+    setSupabaseKey(key.trim())
     setSupaConfigured(!!(url.trim() && key.trim()))
     if (url.trim() && key.trim()) {
       initSupabase(url.trim(), key.trim())
@@ -1082,6 +1089,7 @@ export default function App() {
             onUpdate={handleUpdateScheduleEntry}
             onDelete={handleDeleteScheduleEntry}
             onBatchImport={handleBatchImport}
+            onRefresh={() => void loadScheduleEntries()}
           />
         </div>
       )}
@@ -1121,6 +1129,8 @@ export default function App() {
           tulguStatus={tulguStatus}
           supaUser={supaUser}
           supaConfigured={supaConfigured}
+          supabaseUrl={supabaseUrl}
+          supabaseKey={supabaseKey}
           syncStatus={syncStatus}
           lastSyncAt={lastSyncAt}
           onThemeChange={handleThemeChange}

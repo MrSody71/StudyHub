@@ -2,7 +2,7 @@ import { ipcMain, dialog, BrowserWindow, Notification } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { getAllSubjects, createSubject, updateSubject, deleteSubject, archiveSubject } from '../db/subjects'
-import { upsertRowFromRemote, getLocalChangesSince, replaceTaskTagsFromRemote } from '../db/sync'
+import { upsertRowFromRemote, getLocalChangesSince, replaceTaskTagsFromRemote, getLocalTaskTags } from '../db/sync'
 import { getAllSemesters, createSemester, updateSemester, deleteSemester, setActiveSemester } from '../db/semesters'
 import { getTasksBySubject, getAllTasksWithDeadline, createTask, updateTask, deleteTask, completeTaskAndSpawnNext } from '../db/tasks'
 import {
@@ -205,6 +205,9 @@ export function setupIpcHandlers(): void {
   )
   ipcMain.handle('sync:replaceTaskTags', (_e, taskId: number, tagIds: number[]) =>
     wrap(() => { replaceTaskTagsFromRemote(taskId, tagIds); return null })
+  )
+  ipcMain.handle('sync:getAllTaskTags', () =>
+    wrap(() => getLocalTaskTags())
   )
 
   // ── File dialog ───────────────────────────────────────────────────────────

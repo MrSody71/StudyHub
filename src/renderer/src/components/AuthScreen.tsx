@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 interface Props {
   onSignIn:      (email: string, password: string) => Promise<void>
@@ -8,17 +8,48 @@ interface Props {
 
 type Tab = 'login' | 'register'
 
+interface PasswordRule {
+  label: string
+  ok:    boolean
+}
+
+function checkPassword(pwd: string): PasswordRule[] {
+  return [
+    { label: 'Не менее 8 символов',    ok: pwd.length >= 8 },
+    { label: 'Содержит буквы',          ok: /[a-zA-Zа-яА-ЯёЁ]/.test(pwd) },
+    { label: 'Содержит цифры',          ok: /[0-9]/.test(pwd) },
+  ]
+}
+
 export default function AuthScreen({ onSignIn, onSignUp, onWorkLocally }: Props) {
   const [tab, setTab]           = useState<Tab>('login')
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
+  const [showPwd, setShowPwd]   = useState(false)
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
-  const [done, setDone]         = useState(false) // email confirmation sent
+  const [done, setDone]         = useState(false)
+  const [pwdTouched, setPwdTouched] = useState(false)
+
+  const rules   = useMemo(() => checkPassword(password), [password])
+  const pwdValid = rules.every(r => r.ok)
+
+  // Strength: 0-3
+  const strength = rules.filter(r => r.ok).length
+
+  const strengthLabel = strength === 0 ? '' :
+                        strength === 1 ? 'Слабый' :
+                        strength === 2 ? 'Средний' : 'Надёжный'
+  const strengthColor = strength === 1 ? 'var(--danger)' :
+                        strength === 2 ? 'var(--warning)' : 'var(--success)'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!email.trim() || !password) return
+    if (tab === 'register' && !pwdValid) {
+      setPwdTouched(true)
+      return
+    }
     setError(null)
     setLoading(true)
     try {
@@ -30,15 +61,20 @@ export default function AuthScreen({ onSignIn, onSignUp, onWorkLocally }: Props)
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      // Translate common Supabase error messages
       if (msg.includes('Invalid login credentials')) setError('Неверный email или пароль')
       else if (msg.includes('Email not confirmed'))   setError('Подтвердите email — письмо отправлено на почту')
       else if (msg.includes('already registered'))    setError('Этот email уже зарегистрирован')
-      else if (msg.includes('Password should be'))    setError('Пароль должен быть не менее 6 символов')
+      else if (msg.includes('Password should be'))    setError('Пароль должен быть не менее 8 символов и содержать буквы и цифры')
       else setError(msg)
     } finally {
       setLoading(false)
     }
+  }
+
+  function switchTab(t: Tab) {
+    setTab(t)
+    setError(null)
+    setPwdTouched(false)
   }
 
   return (
@@ -51,21 +87,20 @@ export default function AuthScreen({ onSignIn, onSignUp, onWorkLocally }: Props)
         </div>
 
         {done ? (
-          /* Email confirmation pending */
           <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>📧</div>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
+            <div style={{ fontSize: 40, marginBottom: 14 }}>📧</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>
               Подтвердите почту
             </div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              Письмо со ссылкой для подтверждения отправлено на{' '}
-              <strong>{email}</strong>.<br />
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+              Письмо со ссылкой отправлено на{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>{email}</strong>.<br />
               После подтверждения войдите в аккаунт.
             </div>
             <button
-              className="btn btn-secondary"
-              style={{ marginTop: 20, width: '100%' }}
-              onClick={() => { setDone(false); setTab('login') }}
+              className="btn btn-primary"
+              style={{ marginTop: 22, width: '100%' }}
+              onClick={() => { setDone(false); switchTab('login') }}
             >
               Войти
             </button>
@@ -76,23 +111,21 @@ export default function AuthScreen({ onSignIn, onSignUp, onWorkLocally }: Props)
             <div className="auth-tabs">
               <button
                 className={`auth-tab${tab === 'login' ? ' active' : ''}`}
-                onClick={() => { setTab('login'); setError(null) }}
+                onClick={() => switchTab('login')}
               >
                 Вход
               </button>
               <button
                 className={`auth-tab${tab === 'register' ? ' active' : ''}`}
-                onClick={() => { setTab('register'); setError(null) }}
+                onClick={() => switchTab('register')}
               >
                 Регистрация
               </button>
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {error && (
-                <div className="auth-error">{error}</div>
-              )}
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {error && <div className="auth-error">{error}</div>}
 
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Email</label>
@@ -110,23 +143,80 @@ export default function AuthScreen({ onSignIn, onSignUp, onWorkLocally }: Props)
 
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Пароль</label>
-                <input
-                  className="form-input"
-                  type="password"
-                  autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder={tab === 'register' ? 'Минимум 6 символов' : '••••••••'}
-                  required
-                  minLength={6}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    className="form-input"
+                    type={showPwd ? 'text' : 'password'}
+                    autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    onBlur={() => tab === 'register' && setPwdTouched(true)}
+                    placeholder={tab === 'register' ? 'Мин. 8 символов, буквы и цифры' : '••••••••'}
+                    required
+                    style={{ paddingRight: 40 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwd(v => !v)}
+                    style={{
+                      position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--text-tertiary)', fontSize: 15, padding: '2px 4px',
+                      lineHeight: 1,
+                    }}
+                    tabIndex={-1}
+                    title={showPwd ? 'Скрыть пароль' : 'Показать пароль'}
+                  >
+                    {showPwd ? '🙈' : '👁'}
+                  </button>
+                </div>
+
+                {/* Strength bar + rules — only on register */}
+                {tab === 'register' && password.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    {/* Strength bar */}
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+                      {[1, 2, 3].map(i => (
+                        <div
+                          key={i}
+                          style={{
+                            flex: 1, height: 3, borderRadius: 2,
+                            background: i <= strength ? strengthColor : 'var(--border)',
+                            transition: 'background .2s',
+                          }}
+                        />
+                      ))}
+                      {strengthLabel && (
+                        <span style={{ fontSize: 11, fontWeight: 600, color: strengthColor, marginLeft: 4, whiteSpace: 'nowrap' }}>
+                          {strengthLabel}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Rules checklist — show only when touched or any rule fails */}
+                    {(pwdTouched || !pwdValid) && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {rules.map(r => (
+                          <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                            <span style={{ color: r.ok ? 'var(--success)' : 'var(--danger)', fontSize: 13, lineHeight: 1 }}>
+                              {r.ok ? '✓' : '✗'}
+                            </span>
+                            <span style={{ color: r.ok ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
+                              {r.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <button
                 type="submit"
                 className="btn btn-primary"
-                style={{ width: '100%', marginTop: 4 }}
-                disabled={loading || !email.trim() || !password}
+                style={{ width: '100%', marginTop: 2 }}
+                disabled={loading || !email.trim() || !password || (tab === 'register' && !pwdValid)}
               >
                 {loading
                   ? (tab === 'login' ? 'Входим…' : 'Регистрируем…')
@@ -138,15 +228,11 @@ export default function AuthScreen({ onSignIn, onSignUp, onWorkLocally }: Props)
             <div className="auth-divider"><span>или</span></div>
 
             {/* Work locally */}
-            <button
-              className="btn btn-secondary"
-              style={{ width: '100%' }}
-              onClick={onWorkLocally}
-            >
+            <button className="btn btn-secondary" style={{ width: '100%' }} onClick={onWorkLocally}>
               Работать локально
             </button>
-            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textAlign: 'center', marginTop: 4, lineHeight: 1.5 }}>
-              Данные хранятся только на этом компьютере.
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textAlign: 'center', marginTop: 4, lineHeight: 1.6 }}>
+              Данные хранятся только на этом компьютере.<br />
               Авторизоваться можно будет позже в настройках.
             </div>
           </>

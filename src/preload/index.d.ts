@@ -114,6 +114,7 @@ declare global {
         upsertRow:       (table: string, row: unknown)             => Promise<IpcResult<null>>
         getLocalChanges: (since: string | null)                    => Promise<IpcResult<Record<string, unknown[]>>>
         replaceTaskTags: (taskId: number, tagIds: number[])        => Promise<IpcResult<null>>
+        getAllTaskTags:   ()                                        => Promise<IpcResult<{ task_id: number; tag_id: number }[]>>
       }
       dialog: {
         openFile:      () => Promise<IpcResult<string[] | null>>
