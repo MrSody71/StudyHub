@@ -49,13 +49,13 @@ function normAll<T>(rows: Record<string, unknown>[]): T[] {
 }
 
 /** Returns the authenticated user's id, throwing if not signed in. */
-function uid(): string {
+async function uid(): Promise<string> {
   const sb = getSupabase()
   if (!sb) throw new Error('Supabase не инициализирован')
-  // The session is synchronously available via _client.auth.currentUser in v2
-  const user = (sb as unknown as { auth: { currentUser: { id: string } | null } }).auth.currentUser
-  if (!user) throw new Error('Не авторизован')
-  return user.id
+  const { data: { session }, error } = await sb.auth.getSession()
+  if (error) throw error
+  if (!session) throw new Error('Не авторизован')
+  return session.user.id
 }
 
 /** Pending File objects stored during dialog.openFile() — keyed by fake path. */
@@ -1281,12 +1281,12 @@ function syncGetAllTaskTags() {
 // ── Build the full window.api object ─────────────────────────────────────────
 
 export function buildWebApi(): Window['api'] {
-  // Eagerly initialise Supabase from env vars if available — App.tsx will also
-  // call initSupabase via initAuth(), but doing it here ensures any early API
-  // call (before auth check completes) still has a client.
+  // Eagerly initialise Supabase from env vars only if not already initialised.
+  // App.tsx will also call initSupabase via initAuth(); initialising twice with
+  // the same key creates a "Multiple GoTrueClient instances" warning.
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
   const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
-  if (supabaseUrl && supabaseKey) initSupabase(supabaseUrl, supabaseKey)
+  if (supabaseUrl && supabaseKey && !getSupabase()) initSupabase(supabaseUrl, supabaseKey)
 
   return {
     subjects: {
