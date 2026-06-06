@@ -1016,21 +1016,6 @@ export default function App() {
               onClick={() => void handleManualSync()}
             />
           )}
-          <button
-            className="settings-btn"
-            style={{ position: 'relative' }}
-            onClick={() => setShowSupport((v) => !v)}
-          >
-            💬 Поддержка
-            {supportUnread > 0 && (
-              <span style={{
-                position: 'absolute', top: 4, right: 8,
-                background: 'var(--danger)', color: '#fff',
-                borderRadius: '999px', fontSize: 10, fontWeight: 700,
-                padding: '1px 5px', lineHeight: 1.4,
-              }}>{supportUnread}</span>
-            )}
-          </button>
           <button className="settings-btn" onClick={() => setShowSettings(true)}>⚙ Настройки</button>
         </div>
       </div>
@@ -1041,10 +1026,8 @@ export default function App() {
         view={view}
         pomRunning={pomState.status === 'running'}
         isAdmin={isAdmin}
-        supportUnread={supportUnread}
         onNavigate={(v) => { setView(v); setSelectedTaskId(null) }}
         onSettings={() => setShowSettings(true)}
-        onSupport={() => setShowSupport((v) => !v)}
         onClose={() => setShowDrawer(false)}
       />
 

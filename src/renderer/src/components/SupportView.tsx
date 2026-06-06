@@ -372,14 +372,10 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
       )}
 
       {/* ── Chat messages ────────────────────────────────────────────────── */}
-      {(selectedTicket || (!isAdmin && !loadingTickets)) && (
+      {(selectedTicket || !isAdmin) && (
         <div className="support-widget-messages">
-          {loadingMsgs ? (
+          {loadingMsgs || loadingTickets ? (
             <p className="support-widget-hint">Загрузка…</p>
-          ) : globalError ? (
-            <p className="support-widget-hint" style={{ color: 'var(--danger)' }}>{globalError}</p>
-          ) : messages.length === 0 && selectedTicket ? (
-            <p className="support-widget-hint">Нет сообщений</p>
           ) : messages.length === 0 ? (
             <div className="support-empty-chat">
               <span style={{ fontSize: 32 }}>💬</span>
@@ -401,8 +397,8 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
         </div>
       )}
 
-      {/* ── Reply bar ────────────────────────────────────────────────────── */}
-      {(selectedTicket || (!isAdmin && !loadingTickets && !globalError)) && (
+      {/* ── Reply bar — always visible for users ─────────────────────────── */}
+      {(selectedTicket || !isAdmin) && (
         <>
           {sendError && (
             <p style={{ margin: '0 12px 4px', fontSize: 12, color: 'var(--danger)' }}>{sendError}</p>
