@@ -66,6 +66,7 @@ export default function App() {
 
   const [sessionVersion, setSessionVersion] = useState(0)
   const [supportUnread,  setSupportUnread]  = useState(0)
+  const [showSupport,    setShowSupport]    = useState(false)
   const handleSupportUnread = useCallback((n: number) => setSupportUnread(n), [])
 
   // ── Supabase auth state ──────────────────────────────────────────────────
@@ -927,7 +928,6 @@ export default function App() {
            : view === 'schedule' ? 'Расписание'
            : view === 'calendar' ? 'Календарь'
            : view === 'wallet'   ? 'Кошелёк'
-           : view === 'support'  ? 'Поддержка'
            : 'Таймер'}
         </span>
         <div className="mobile-top-bar-actions">
@@ -969,10 +969,6 @@ export default function App() {
           </button>
           <button className={`view-nav-btn${view === 'wallet' ? ' active' : ''}`} onClick={() => setView('wallet')}>
             <span className="view-nav-icon">💳</span> Кошелёк
-          </button>
-          <button className={`view-nav-btn${view === 'support' ? ' active' : ''}`} onClick={() => setView('support')}>
-            <span className="view-nav-icon">💬</span> Поддержка
-            {supportUnread > 0 && <span className="nav-unread-badge">{supportUnread}</span>}
           </button>
 
         </div>
@@ -1030,7 +1026,6 @@ export default function App() {
         view={view}
         pomRunning={pomState.status === 'running'}
         isAdmin={isAdmin}
-        supportUnread={supportUnread}
         onNavigate={(v) => { setView(v); setSelectedTaskId(null) }}
         onSettings={() => setShowSettings(true)}
         onClose={() => setShowDrawer(false)}
@@ -1219,12 +1214,24 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Support view ──────────────────────────────────────────────────── */}
-      {view === 'support' && (
-        <div className="full-content-panel">
-          <SupportView onUnreadChange={handleSupportUnread} />
-        </div>
-      )}
+      {/* ── Support FAB + floating panel ──────────────────────────────────── */}
+      <div className="support-fab-wrap">
+        {showSupport && (
+          <div className="support-panel">
+            <SupportView onUnreadChange={handleSupportUnread} onClose={() => setShowSupport(false)} />
+          </div>
+        )}
+        <button
+          className="support-fab"
+          onClick={() => setShowSupport((v) => !v)}
+          aria-label="Поддержка"
+        >
+          💬
+          {supportUnread > 0 && !showSupport && (
+            <span className="support-fab-badge">{supportUnread}</span>
+          )}
+        </button>
+      </div>
 
       {showSettings && (
         <SettingsPanel

@@ -2,7 +2,7 @@ export type TaskStatus   = 'not_started' | 'in_progress' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high'
 export type Theme        = 'light' | 'dark'
 export type SubjectSort  = 'alpha' | 'semester' | 'grade'
-export type AppView      = 'dashboard' | 'subjects' | 'tasks' | 'schedule' | 'calendar' | 'timer' | 'wallet' | 'support'
+export type AppView      = 'dashboard' | 'subjects' | 'tasks' | 'schedule' | 'calendar' | 'timer' | 'wallet'
 
 export interface Semester {
   id:         number

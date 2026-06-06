@@ -5,6 +5,7 @@ import type { SupportTicket, SupportMessage, TicketStatus } from '../types'
 
 interface Props {
   onUnreadChange: (n: number) => void
+  onClose:        () => void
 }
 
 const STATUS_LABELS: Record<TicketStatus, string> = {
@@ -27,28 +28,28 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function SupportView({ onUnreadChange }: Props) {
+export default function SupportView({ onUnreadChange, onClose }: Props) {
   const { userProfile } = useAuth()
   const isAdmin = userProfile?.role === 'admin'
 
-  const [tickets, setTickets]                 = useState<SupportTicket[]>([])
-  const [selectedTicket, setSelectedTicket]   = useState<SupportTicket | null>(null)
-  const [messages, setMessages]               = useState<SupportMessage[]>([])
-  const [statusFilter, setStatusFilter]       = useState<TicketStatus | 'all'>('all')
-  const [loadingTickets, setLoadingTickets]   = useState(true)
-  const [loadingMsgs, setLoadingMsgs]         = useState(false)
-  const [globalError, setGlobalError]         = useState<string | null>(null)
-  const [formError, setFormError]             = useState<string | null>(null)
-  const [reply, setReply]                     = useState('')
-  const [sending, setSending]                 = useState(false)
-  const [showNewForm, setShowNewForm]         = useState(false)
-  const [newSubject, setNewSubject]           = useState('')
-  const [newMessage, setNewMessage]           = useState('')
-  const [creating, setCreating]               = useState(false)
-  const [mobileShowChat, setMobileShowChat]   = useState(false)
+  const [tickets, setTickets]               = useState<SupportTicket[]>([])
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null)
+  const [messages, setMessages]             = useState<SupportMessage[]>([])
+  const [statusFilter, setStatusFilter]     = useState<TicketStatus | 'all'>('all')
+  const [loadingTickets, setLoadingTickets] = useState(true)
+  const [loadingMsgs, setLoadingMsgs]       = useState(false)
+  const [globalError, setGlobalError]       = useState<string | null>(null)
+  const [formError, setFormError]           = useState<string | null>(null)
+  const [reply, setReply]                   = useState('')
+  const [sending, setSending]               = useState(false)
+  const [showNewForm, setShowNewForm]       = useState(false)
+  const [newSubject, setNewSubject]         = useState('')
+  const [newMessage, setNewMessage]         = useState('')
+  const [creating, setCreating]             = useState(false)
 
-  const pollFnRef     = useRef<() => Promise<void>>(async () => {})
-  const messagesEnd   = useRef<HTMLDivElement | null>(null)
+  const pollFnRef   = useRef<() => Promise<void>>(async () => {})
+  const messagesEnd = useRef<HTMLDivElement | null>(null)
+  const replyRef    = useRef<HTMLTextAreaElement | null>(null)
 
   // ── Tickets ────────────────────────────────────────────────────────────────
 
@@ -77,7 +78,6 @@ export default function SupportView({ onUnreadChange }: Props) {
       if (error) { setGlobalError(error.message) }
       else {
         setTickets((data as SupportTicket[]) ?? [])
-        // count unread admin→user messages
         const { count } = await sb
           .from('support_messages')
           .select('id', { count: 'exact', head: true })
@@ -121,6 +121,8 @@ export default function SupportView({ onUnreadChange }: Props) {
       setLoadingMsgs(false)
       await markRead(selectedTicket.id)
       void loadTickets()
+      // focus reply input
+      setTimeout(() => replyRef.current?.focus(), 50)
     })
   }, [selectedTicket]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -129,7 +131,7 @@ export default function SupportView({ onUnreadChange }: Props) {
     messagesEnd.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // ── Polling (5 s when chat is open) ───────────────────────────────────────
+  // ── Polling ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!selectedTicket) return
@@ -172,7 +174,6 @@ export default function SupportView({ onUnreadChange }: Props) {
       setNewMessage('')
       await loadTickets()
       setSelectedTicket(ticket as SupportTicket)
-      setMobileShowChat(true)
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : String(e))
     }
@@ -182,217 +183,213 @@ export default function SupportView({ onUnreadChange }: Props) {
   // ── Send reply ─────────────────────────────────────────────────────────────
 
   async function handleSendReply() {
-    if (!reply.trim() || !selectedTicket || !userProfile) return
+    const text = reply.trim()
+    if (!text || !selectedTicket || !userProfile) return
     const sb = getSupabase()
     if (!sb) return
     setSending(true)
+    setReply('')
     const { error } = await sb.from('support_messages').insert({
       ticket_id: selectedTicket.id,
       sender:    isAdmin ? 'admin' : 'user',
-      message:   reply.trim(),
+      message:   text,
     })
-    if (!error) {
-      setReply('')
+    if (error) {
+      setReply(text) // restore on failure
+    } else {
       await loadMessages(selectedTicket.id)
       void loadTickets()
     }
     setSending(false)
+    replyRef.current?.focus()
   }
 
-  // ── Change ticket status (admin) ───────────────────────────────────────────
+  // ── Change status ──────────────────────────────────────────────────────────
 
   async function handleStatusChange(ticketId: string, status: TicketStatus) {
     const sb = getSupabase()
     if (!sb) return
-    const { error } = await sb
-      .from('support_tickets')
-      .update({ status })
-      .eq('id', ticketId)
+    const { error } = await sb.from('support_tickets').update({ status }).eq('id', ticketId)
     if (!error) {
       setTickets((prev) => prev.map((t) => t.id === ticketId ? { ...t, status } : t))
       setSelectedTicket((prev) => prev?.id === ticketId ? { ...prev, status } : prev)
     }
   }
 
-  // ── Select ticket ──────────────────────────────────────────────────────────
-
-  function selectTicket(ticket: SupportTicket) {
-    setSelectedTicket(ticket)
-    setMobileShowChat(true)
-    setReply('')
-  }
-
-  // ── Filtered list ──────────────────────────────────────────────────────────
+  // ── Filtered tickets ───────────────────────────────────────────────────────
 
   const filtered = statusFilter === 'all'
     ? tickets
     : tickets.filter((t) => t.status === statusFilter)
 
-  // ── No Supabase ────────────────────────────────────────────────────────────
-
-  if (globalError && tickets.length === 0 && !loadingTickets) {
-    return (
-      <div className="support-view">
-        <div className="support-no-supabase">
-          <span style={{ fontSize: 48 }}>☁️</span>
-          <p>{globalError}</p>
-        </div>
-      </div>
-    )
-  }
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="support-view">
+    <div className="support-widget">
 
-      {/* ── Ticket list panel ────────────────────────────────────────────── */}
-      <div className={`support-list-panel${mobileShowChat ? ' support-mobile-hide' : ''}`}>
-        <div className="support-list-header">
-          <h2 className="support-title">Поддержка</h2>
-          {!isAdmin && (
-            <button className="btn btn-primary btn-sm" onClick={() => { setFormError(null); setShowNewForm(true) }}>
-              + Обращение
-            </button>
+      {/* ── Panel header ─────────────────────────────────────────────────── */}
+      <div className="support-widget-header">
+        {selectedTicket ? (
+          <button className="support-widget-back btn btn-ghost btn-sm" onClick={() => { setSelectedTicket(null); setReply('') }}>
+            ←
+          </button>
+        ) : (
+          <span className="support-widget-icon">💬</span>
+        )}
+
+        <span className="support-widget-title">
+          {selectedTicket ? selectedTicket.subject : 'Поддержка'}
+        </span>
+
+        {isAdmin && selectedTicket && (
+          <select
+            className="support-status-select"
+            value={selectedTicket.status}
+            onChange={(e) => void handleStatusChange(selectedTicket.id, e.target.value as TicketStatus)}
+          >
+            <option value="open">Открыт</option>
+            <option value="in_progress">В работе</option>
+            <option value="closed">Закрыт</option>
+          </select>
+        )}
+
+        <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ marginLeft: 'auto', flexShrink: 0 }}>✕</button>
+      </div>
+
+      {/* ── Ticket list ───────────────────────────────────────────────────── */}
+      {!selectedTicket && (
+        <div className="support-widget-list">
+          {/* Error / no supabase */}
+          {globalError && (
+            <p className="support-widget-hint" style={{ color: 'var(--danger)' }}>{globalError}</p>
+          )}
+
+          {/* Admin filter tabs */}
+          {isAdmin && !globalError && (
+            <div className="support-filter-tabs">
+              {(['all', 'open', 'in_progress', 'closed'] as const).map((s) => (
+                <button
+                  key={s}
+                  className={`support-filter-tab${statusFilter === s ? ' active' : ''}`}
+                  onClick={() => setStatusFilter(s)}
+                >
+                  {s === 'all' ? 'Все' : STATUS_LABELS[s as TicketStatus]}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* New ticket button (user only) */}
+          {!isAdmin && !globalError && (
+            <div style={{ padding: '10px 12px 4px' }}>
+              <button
+                className="btn btn-primary"
+                style={{ width: '100%' }}
+                onClick={() => { setFormError(null); setShowNewForm(true) }}
+              >
+                + Новое обращение
+              </button>
+            </div>
+          )}
+
+          {loadingTickets ? (
+            <p className="support-widget-hint">Загрузка…</p>
+          ) : filtered.length === 0 ? (
+            <p className="support-widget-hint">
+              {globalError ? '' : isAdmin ? 'Нет обращений' : 'Обращений нет'}
+            </p>
+          ) : (
+            <div className="support-ticket-list">
+              {filtered.map((ticket) => (
+                <button
+                  key={ticket.id}
+                  className="support-ticket-item"
+                  onClick={() => { setSelectedTicket(ticket); setReply('') }}
+                >
+                  <div className="support-ticket-row">
+                    <span className="support-ticket-subject">{ticket.subject}</span>
+                    {(ticket.unread ?? 0) > 0 && (
+                      <span className="support-ticket-unread">{ticket.unread}</span>
+                    )}
+                  </div>
+                  {isAdmin && ticket.email && (
+                    <div className="support-ticket-email">{ticket.email}</div>
+                  )}
+                  <div className="support-ticket-meta">
+                    <span
+                      className="support-status-chip"
+                      style={{ color: STATUS_COLORS[ticket.status], borderColor: STATUS_COLORS[ticket.status] }}
+                    >
+                      {STATUS_LABELS[ticket.status]}
+                    </span>
+                    <span className="support-ticket-date">{fmtDate(ticket.updated_at)}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
           )}
         </div>
+      )}
 
-        {isAdmin && (
-          <div className="support-filter-tabs">
-            {(['all', 'open', 'in_progress', 'closed'] as const).map((s) => (
-              <button
-                key={s}
-                className={`support-filter-tab${statusFilter === s ? ' active' : ''}`}
-                onClick={() => setStatusFilter(s)}
-              >
-                {s === 'all' ? 'Все' : STATUS_LABELS[s as TicketStatus]}
-              </button>
-            ))}
-          </div>
-        )}
+      {/* ── Chat ──────────────────────────────────────────────────────────── */}
+      {selectedTicket && (
+        <>
+          {isAdmin && selectedTicket.email && (
+            <div className="support-chat-email-bar">{selectedTicket.email}</div>
+          )}
 
-        {loadingTickets ? (
-          <p className="support-hint">Загрузка…</p>
-        ) : filtered.length === 0 ? (
-          <p className="support-hint">
-            {isAdmin ? 'Нет обращений' : 'Обращений нет. Создайте первое!'}
-          </p>
-        ) : (
-          <div className="support-ticket-list">
-            {filtered.map((ticket) => (
-              <button
-                key={ticket.id}
-                className={`support-ticket-item${selectedTicket?.id === ticket.id ? ' active' : ''}`}
-                onClick={() => selectTicket(ticket)}
-              >
-                <div className="support-ticket-row">
-                  <span className="support-ticket-subject">{ticket.subject}</span>
-                  {(ticket.unread ?? 0) > 0 && (
-                    <span className="support-ticket-unread">{ticket.unread}</span>
-                  )}
-                </div>
-                {isAdmin && ticket.email && (
-                  <div className="support-ticket-email">{ticket.email}</div>
-                )}
-                <div className="support-ticket-meta">
-                  <span
-                    className="support-status-chip"
-                    style={{ color: STATUS_COLORS[ticket.status], borderColor: STATUS_COLORS[ticket.status] }}
-                  >
-                    {STATUS_LABELS[ticket.status]}
-                  </span>
-                  <span className="support-ticket-date">{fmtDate(ticket.updated_at)}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Chat panel ───────────────────────────────────────────────────── */}
-      <div className={`support-chat-panel${!mobileShowChat ? ' support-mobile-hide' : ''}`}>
-        {!selectedTicket ? (
-          <div className="support-no-supabase">
-            <span style={{ fontSize: 48 }}>💬</span>
-            <p>Выберите обращение, чтобы открыть переписку</p>
-          </div>
-        ) : (
-          <>
-            <div className="support-chat-header">
-              <button
-                className="btn btn-ghost btn-sm support-back-btn"
-                onClick={() => setMobileShowChat(false)}
-              >
-                ← Назад
-              </button>
-              <div className="support-chat-title">
-                <span className="support-chat-subject">{selectedTicket.subject}</span>
-                {isAdmin && selectedTicket.email && (
-                  <span className="support-chat-email">{selectedTicket.email}</span>
-                )}
-              </div>
-              {isAdmin && (
-                <select
-                  className="support-status-select"
-                  value={selectedTicket.status}
-                  onChange={(e) => void handleStatusChange(selectedTicket.id, e.target.value as TicketStatus)}
-                >
-                  <option value="open">Открыт</option>
-                  <option value="in_progress">В работе</option>
-                  <option value="closed">Закрыт</option>
-                </select>
-              )}
-            </div>
-
-            <div className="support-messages">
-              {loadingMsgs ? (
-                <p className="support-hint">Загрузка сообщений…</p>
-              ) : messages.length === 0 ? (
-                <p className="support-hint">Нет сообщений</p>
-              ) : (
-                messages.map((msg) => {
-                  const mine = isAdmin ? msg.sender === 'admin' : msg.sender === 'user'
-                  const newMsg = !msg.is_read && !mine
-                  return (
-                    <div key={msg.id} className={`support-msg${mine ? ' mine' : ' theirs'}${newMsg ? ' new' : ''}`}>
-                      <div className="support-bubble">{msg.message}</div>
-                      <div className="support-msg-time">{fmtTime(msg.created_at)}</div>
-                    </div>
-                  )
-                })
-              )}
-              <div ref={messagesEnd} />
-            </div>
-
-            {selectedTicket.status !== 'closed' ? (
-              <div className="support-reply-bar">
-                <textarea
-                  className="support-reply-input"
-                  value={reply}
-                  onChange={(e) => setReply(e.target.value)}
-                  placeholder="Введите сообщение… (Enter — отправить, Shift+Enter — перенос)"
-                  rows={2}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSendReply() }
-                  }}
-                />
-                <button
-                  className="btn btn-primary"
-                  onClick={() => void handleSendReply()}
-                  disabled={sending || !reply.trim()}
-                >
-                  {sending ? '…' : 'Отправить'}
-                </button>
-              </div>
+          <div className="support-widget-messages">
+            {loadingMsgs ? (
+              <p className="support-widget-hint">Загрузка…</p>
+            ) : messages.length === 0 ? (
+              <p className="support-widget-hint">Нет сообщений</p>
             ) : (
-              <div className="support-closed-notice">Обращение закрыто</div>
+              messages.map((msg) => {
+                const mine   = isAdmin ? msg.sender === 'admin' : msg.sender === 'user'
+                const isNew  = !msg.is_read && !mine
+                return (
+                  <div key={msg.id} className={`support-msg${mine ? ' mine' : ' theirs'}${isNew ? ' new' : ''}`}>
+                    <div className="support-bubble">{msg.message}</div>
+                    <div className="support-msg-time">{fmtTime(msg.created_at)}</div>
+                  </div>
+                )
+              })
             )}
-          </>
-        )}
-      </div>
+            <div ref={messagesEnd} />
+          </div>
+
+          {selectedTicket.status !== 'closed' ? (
+            <div className="support-reply-bar">
+              <textarea
+                ref={replyRef}
+                className="support-reply-input"
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                placeholder="Сообщение… (Enter — отправить)"
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSendReply() }
+                }}
+              />
+              <button
+                className="support-send-btn"
+                onClick={() => void handleSendReply()}
+                disabled={sending || !reply.trim()}
+                aria-label="Отправить"
+              >
+                {sending ? '…' : '➤'}
+              </button>
+            </div>
+          ) : (
+            <div className="support-closed-notice">Обращение закрыто</div>
+          )}
+        </>
+      )}
 
       {/* ── New ticket modal ─────────────────────────────────────────────── */}
       {showNewForm && (
         <div className="modal-overlay" onClick={() => setShowNewForm(false)}>
-          <div className="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal" style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <span className="modal-title">Новое обращение</span>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowNewForm(false)}>✕</button>
@@ -407,7 +404,7 @@ export default function SupportView({ onUnreadChange }: Props) {
               />
               <textarea
                 className="input"
-                placeholder="Опишите вашу проблему или вопрос…"
+                placeholder="Опишите вашу проблему…"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 rows={5}
