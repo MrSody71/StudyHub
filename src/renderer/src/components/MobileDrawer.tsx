@@ -1,13 +1,15 @@
 import type { AppView } from '../types'
 
 interface Props {
-  open:          boolean
-  view:          AppView
-  pomRunning:    boolean
-  isAdmin:       boolean
-  onNavigate:    (v: AppView) => void
-  onSettings:    () => void
-  onClose:       () => void
+  open:           boolean
+  view:           AppView
+  pomRunning:     boolean
+  isAdmin:        boolean
+  supportUnread:  number
+  onNavigate:     (v: AppView) => void
+  onSettings:     () => void
+  onSupport:      () => void
+  onClose:        () => void
 }
 
 const NAV_ITEMS: { view: AppView; icon: string; label: string }[] = [
@@ -20,7 +22,7 @@ const NAV_ITEMS: { view: AppView; icon: string; label: string }[] = [
   { view: 'wallet',    icon: '💳', label: 'Кошелёк'     },
 ]
 
-export default function MobileDrawer({ open, view, pomRunning, isAdmin: _isAdmin, onNavigate, onSettings, onClose }: Props) {
+export default function MobileDrawer({ open, view, pomRunning, isAdmin: _isAdmin, supportUnread, onNavigate, onSettings, onSupport, onClose }: Props) {
   const navItems = NAV_ITEMS
   return (
     <>
@@ -59,6 +61,23 @@ export default function MobileDrawer({ open, view, pomRunning, isAdmin: _isAdmin
           ))}
 
           <div className="mobile-drawer-divider" />
+
+          {/* Support */}
+          <button
+            className="mobile-drawer-item"
+            onClick={() => { onSupport(); onClose() }}
+            style={{ position: 'relative' }}
+          >
+            <span className="mobile-drawer-icon">💬</span>
+            Поддержка
+            {supportUnread > 0 && (
+              <span style={{
+                marginLeft: 'auto', background: 'var(--danger)', color: '#fff',
+                borderRadius: '999px', fontSize: 10, fontWeight: 700,
+                padding: '1px 6px', lineHeight: 1.4,
+              }}>{supportUnread}</span>
+            )}
+          </button>
 
           {/* Settings */}
           <button
