@@ -20,39 +20,39 @@ const STATUS_COLORS: Record<TicketStatus, string> = {
   closed:      'var(--text-tertiary)',
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
-}
-
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
 }
 
 export default function SupportView({ onUnreadChange, onClose }: Props) {
   const { userProfile } = useAuth()
   const isAdmin = userProfile?.role === 'admin'
 
-  const [tickets, setTickets]               = useState<SupportTicket[]>([])
+  // ── Admin state ────────────────────────────────────────────────────────────
+  const [tickets, setTickets]           = useState<SupportTicket[]>([])
+  const [statusFilter, setStatusFilter] = useState<TicketStatus | 'all'>('all')
+  const [loadingTickets, setLoadingTickets] = useState(true)
+
+  // ── Chat state (both user and admin) ──────────────────────────────────────
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null)
   const [messages, setMessages]             = useState<SupportMessage[]>([])
-  const [statusFilter, setStatusFilter]     = useState<TicketStatus | 'all'>('all')
-  const [loadingTickets, setLoadingTickets] = useState(true)
   const [loadingMsgs, setLoadingMsgs]       = useState(false)
-  const [globalError, setGlobalError]       = useState<string | null>(null)
-  const [formError, setFormError]           = useState<string | null>(null)
   const [reply, setReply]                   = useState('')
   const [sending, setSending]               = useState(false)
   const [sendError, setSendError]           = useState<string | null>(null)
-  const [showNewForm, setShowNewForm]       = useState(false)
-  const [newSubject, setNewSubject]         = useState('')
-  const [newMessage, setNewMessage]         = useState('')
-  const [creating, setCreating]             = useState(false)
+
+  // ── Global error ───────────────────────────────────────────────────────────
+  const [globalError, setGlobalError] = useState<string | null>(null)
 
   const pollFnRef   = useRef<() => Promise<void>>(async () => {})
   const messagesEnd = useRef<HTMLDivElement | null>(null)
   const replyRef    = useRef<HTMLTextAreaElement | null>(null)
 
-  // ── Tickets ────────────────────────────────────────────────────────────────
+  // ── Load tickets ──────────────────────────────────────────────────────────
 
   const loadTickets = useCallback(async () => {
     const sb = getSupabase()
@@ -78,28 +78,28 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
         .order('updated_at', { ascending: false })
       if (error) { setGlobalError(error.message) }
       else {
-        setTickets((data as SupportTicket[]) ?? [])
+        const rows = (data as SupportTicket[]) ?? []
+        setTickets(rows)
         const { count } = await sb
           .from('support_messages')
           .select('id', { count: 'exact', head: true })
           .eq('sender', 'admin')
           .eq('is_read', false)
         onUnreadChange(count ?? 0)
+
+        // Auto-select the latest open ticket for regular users
+        if (!selectedTicket) {
+          const open = rows.find((t) => t.status !== 'closed')
+          if (open) setSelectedTicket(open)
+        }
       }
     }
     setLoadingTickets(false)
-  }, [isAdmin, onUnreadChange])
+  }, [isAdmin, onUnreadChange, selectedTicket])
 
-  useEffect(() => { void loadTickets() }, [loadTickets])
+  useEffect(() => { void loadTickets() }, [isAdmin, onUnreadChange]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-open new ticket form when user has no tickets
-  useEffect(() => {
-    if (!loadingTickets && !isAdmin && tickets.length === 0 && !globalError && !selectedTicket) {
-      setShowNewForm(true)
-    }
-  }, [loadingTickets, isAdmin, tickets.length, globalError, selectedTicket])
-
-  // ── Messages ───────────────────────────────────────────────────────────────
+  // ── Load messages ─────────────────────────────────────────────────────────
 
   const loadMessages = useCallback(async (ticketId: string) => {
     const sb = getSupabase()
@@ -130,17 +130,15 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
       setLoadingMsgs(false)
       await markRead(selectedTicket.id)
       void loadTickets()
-      // focus reply input
       setTimeout(() => replyRef.current?.focus(), 50)
     })
   }, [selectedTicket]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // ── Polling ────────────────────────────────────────────────────────────────
+  // ── Polling ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!selectedTicket) return
@@ -157,67 +155,55 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
     return () => clearInterval(id)
   }, [selectedTicket?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Create ticket ──────────────────────────────────────────────────────────
+  // ── Send message (creates ticket on first message for users) ───────────────
 
-  async function handleCreateTicket() {
-    if (!newSubject.trim() || !newMessage.trim()) return
-    const sb = getSupabase()
-    if (!sb) { setFormError('Поддержка доступна только в облачной версии'); return }
-    if (!userProfile) { setFormError('Войдите в аккаунт, чтобы обратиться в поддержку'); return }
-    setCreating(true)
-    setFormError(null)
-    try {
-      const { data: ticket, error: tErr } = await sb
-        .from('support_tickets')
-        .insert({ user_id: userProfile.id, subject: newSubject.trim() })
-        .select()
-        .single()
-      if (tErr) throw tErr
-      const { error: mErr } = await sb.from('support_messages').insert({
-        ticket_id: (ticket as SupportTicket).id,
-        sender:    'user',
-        message:   newMessage.trim(),
-      })
-      if (mErr) throw mErr
-      setShowNewForm(false)
-      setNewSubject('')
-      setNewMessage('')
-      await loadTickets()
-      setSelectedTicket(ticket as SupportTicket)
-    } catch (e: unknown) {
-      setFormError(e instanceof Error ? e.message : String(e))
-    }
-    setCreating(false)
-  }
-
-  // ── Send reply ─────────────────────────────────────────────────────────────
-
-  async function handleSendReply() {
+  async function handleSend() {
     const text = reply.trim()
-    if (!text || !selectedTicket) return
+    if (!text || sending) return
     setSendError(null)
-    if (!userProfile) { setSendError('Войдите в аккаунт'); return }
+
     const sb = getSupabase()
-    if (!sb) { setSendError('Нет подключения к Supabase'); return }
+    if (!sb) { setSendError('Поддержка доступна только в облачной версии'); return }
+    if (!userProfile) { setSendError('Войдите в аккаунт'); return }
+
     setSending(true)
     setReply('')
-    const { error } = await sb.from('support_messages').insert({
-      ticket_id: selectedTicket.id,
-      sender:    isAdmin ? 'admin' : 'user',
-      message:   text,
-    })
-    if (error) {
-      setReply(text)
-      setSendError(error.message)
-    } else {
-      await loadMessages(selectedTicket.id)
+
+    try {
+      let ticket = selectedTicket
+
+      // Create ticket automatically on first message
+      if (!ticket) {
+        const subject = text.length > 60 ? text.slice(0, 57) + '…' : text
+        const { data, error } = await sb
+          .from('support_tickets')
+          .insert({ user_id: userProfile.id, subject })
+          .select()
+          .single()
+        if (error) throw error
+        ticket = data as SupportTicket
+        setSelectedTicket(ticket)
+      }
+
+      const { error } = await sb.from('support_messages').insert({
+        ticket_id: ticket.id,
+        sender:    isAdmin ? 'admin' : 'user',
+        message:   text,
+      })
+      if (error) throw error
+
+      await loadMessages(ticket.id)
       void loadTickets()
+    } catch (e: unknown) {
+      setReply(text)
+      setSendError(e instanceof Error ? e.message : String(e))
     }
+
     setSending(false)
     replyRef.current?.focus()
   }
 
-  // ── Change status ──────────────────────────────────────────────────────────
+  // ── Admin: change ticket status ────────────────────────────────────────────
 
   async function handleStatusChange(ticketId: string, status: TicketStatus) {
     const sb = getSupabase()
@@ -229,26 +215,28 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
     }
   }
 
-  // ── Filtered tickets ───────────────────────────────────────────────────────
+  // ── Filtered tickets (admin) ───────────────────────────────────────────────
 
   const filtered = statusFilter === 'all'
     ? tickets
     : tickets.filter((t) => t.status === statusFilter)
+
+  // ── Whether input should be disabled ──────────────────────────────────────
+
+  const inputDisabled = selectedTicket?.status === 'closed'
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="support-widget">
 
-      {/* ── Panel header ─────────────────────────────────────────────────── */}
+      {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="support-widget-header">
-        {(selectedTicket || showNewForm) ? (
-          <button className="support-widget-back btn btn-ghost btn-sm" onClick={() => {
-            setSelectedTicket(null)
-            setReply('')
-            setShowNewForm(false)
-            setFormError(null)
-          }}>
+        {isAdmin && selectedTicket ? (
+          <button
+            className="support-widget-back btn btn-ghost btn-sm"
+            onClick={() => { setSelectedTicket(null); setReply('') }}
+          >
             ←
           </button>
         ) : (
@@ -256,20 +244,22 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
         )}
 
         <span className="support-widget-title">
-          {selectedTicket ? selectedTicket.subject : showNewForm ? 'Новое обращение' : 'Поддержка'}
+          {isAdmin && selectedTicket ? selectedTicket.subject : 'Поддержка'}
         </span>
 
-        {/* New ticket button — visible for users on ticket list */}
-        {!isAdmin && !selectedTicket && !showNewForm && (
+        {/* Admin: ticket history button */}
+        {!isAdmin && tickets.length > 1 && (
           <button
-            className="btn btn-primary btn-sm"
-            style={{ flexShrink: 0 }}
-            onClick={() => { setFormError(null); setNewSubject(''); setNewMessage(''); setShowNewForm(true) }}
+            className="btn btn-ghost btn-sm"
+            style={{ flexShrink: 0, fontSize: 11 }}
+            onClick={() => setSelectedTicket(null)}
+            title="История обращений"
           >
-            + Обращение
+            ☰
           </button>
         )}
 
+        {/* Admin: status selector */}
         {isAdmin && selectedTicket && (
           <select
             className="support-status-select"
@@ -285,46 +275,14 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
         <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ flexShrink: 0 }}>✕</button>
       </div>
 
-      {/* ── New ticket inline form ────────────────────────────────────────── */}
-      {!selectedTicket && showNewForm && (
-        <div className="support-new-form">
-          <input
-            className="input"
-            placeholder="Тема обращения"
-            value={newSubject}
-            onChange={(e) => setNewSubject(e.target.value)}
-            autoFocus
-          />
-          <textarea
-            className="input support-new-message"
-            placeholder="Опишите вашу проблему…"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-          />
-          {formError && <p className="support-form-error">{formError}</p>}
-          <div className="support-new-actions">
-            <button className="btn btn-secondary btn-sm" onClick={() => { setShowNewForm(false); setFormError(null) }}>Отмена</button>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => void handleCreateTicket()}
-              disabled={creating || !newSubject.trim() || !newMessage.trim()}
-            >
-              {creating ? 'Отправка…' : 'Отправить'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Ticket list ───────────────────────────────────────────────────── */}
-      {!selectedTicket && !showNewForm && (
+      {/* ── Admin: ticket list ────────────────────────────────────────────── */}
+      {isAdmin && !selectedTicket && (
         <div className="support-widget-list">
-          {/* Error / no supabase */}
           {globalError && (
             <p className="support-widget-hint" style={{ color: 'var(--danger)' }}>{globalError}</p>
           )}
 
-          {/* Admin filter tabs */}
-          {isAdmin && !globalError && (
+          {!globalError && (
             <div className="support-filter-tabs">
               {(['all', 'open', 'in_progress', 'closed'] as const).map((s) => (
                 <button
@@ -341,9 +299,7 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
           {loadingTickets ? (
             <p className="support-widget-hint">Загрузка…</p>
           ) : filtered.length === 0 ? (
-            <p className="support-widget-hint">
-              {globalError ? '' : isAdmin ? 'Нет обращений' : 'Обращений нет'}
-            </p>
+            <p className="support-widget-hint">{globalError ? '' : 'Нет обращений'}</p>
           ) : (
             <div className="support-ticket-list">
               {filtered.map((ticket) => (
@@ -358,7 +314,7 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
                       <span className="support-ticket-unread">{ticket.unread}</span>
                     )}
                   </div>
-                  {isAdmin && ticket.email && (
+                  {ticket.email && (
                     <div className="support-ticket-email">{ticket.email}</div>
                   )}
                   <div className="support-ticket-meta">
@@ -377,38 +333,84 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
         </div>
       )}
 
-      {/* ── Chat ──────────────────────────────────────────────────────────── */}
-      {selectedTicket && (
-        <>
-          {isAdmin && selectedTicket.email && (
-            <div className="support-chat-email-bar">{selectedTicket.email}</div>
-          )}
-
-          <div className="support-widget-messages">
-            {loadingMsgs ? (
-              <p className="support-widget-hint">Загрузка…</p>
-            ) : messages.length === 0 ? (
-              <p className="support-widget-hint">Нет сообщений</p>
-            ) : (
-              messages.map((msg) => {
-                const mine   = isAdmin ? msg.sender === 'admin' : msg.sender === 'user'
-                const isNew  = !msg.is_read && !mine
-                return (
-                  <div key={msg.id} className={`support-msg${mine ? ' mine' : ' theirs'}${isNew ? ' new' : ''}`}>
-                    <div className="support-bubble">{msg.message}</div>
-                    <div className="support-msg-time">{fmtTime(msg.created_at)}</div>
-                  </div>
-                )
-              })
-            )}
-            <div ref={messagesEnd} />
+      {/* ── User: ticket history (when explicitly browsing) ───────────────── */}
+      {!isAdmin && !selectedTicket && tickets.length > 0 && (
+        <div className="support-widget-list">
+          <p className="support-widget-hint" style={{ paddingBottom: 0 }}>История обращений</p>
+          <div className="support-ticket-list">
+            {tickets.map((ticket) => (
+              <button
+                key={ticket.id}
+                className="support-ticket-item"
+                onClick={() => { setSelectedTicket(ticket); setReply('') }}
+              >
+                <div className="support-ticket-row">
+                  <span className="support-ticket-subject">{ticket.subject}</span>
+                  {(ticket.unread ?? 0) > 0 && (
+                    <span className="support-ticket-unread">{ticket.unread}</span>
+                  )}
+                </div>
+                <div className="support-ticket-meta">
+                  <span
+                    className="support-status-chip"
+                    style={{ color: STATUS_COLORS[ticket.status], borderColor: STATUS_COLORS[ticket.status] }}
+                  >
+                    {STATUS_LABELS[ticket.status]}
+                  </span>
+                  <span className="support-ticket-date">{fmtDate(ticket.updated_at)}</span>
+                </div>
+              </button>
+            ))}
+            <button
+              className="support-new-chat-btn"
+              onClick={() => setSelectedTicket(null)}
+            >
+              + Новое обращение
+            </button>
           </div>
+        </div>
+      )}
 
+      {/* ── Chat messages ────────────────────────────────────────────────── */}
+      {(selectedTicket || (!isAdmin && !loadingTickets)) && (
+        <div className="support-widget-messages">
+          {loadingMsgs ? (
+            <p className="support-widget-hint">Загрузка…</p>
+          ) : globalError ? (
+            <p className="support-widget-hint" style={{ color: 'var(--danger)' }}>{globalError}</p>
+          ) : messages.length === 0 && selectedTicket ? (
+            <p className="support-widget-hint">Нет сообщений</p>
+          ) : messages.length === 0 ? (
+            <div className="support-empty-chat">
+              <span style={{ fontSize: 32 }}>💬</span>
+              <p>Напишите нам — мы ответим как можно скорее</p>
+            </div>
+          ) : (
+            messages.map((msg) => {
+              const mine  = isAdmin ? msg.sender === 'admin' : msg.sender === 'user'
+              const isNew = !msg.is_read && !mine
+              return (
+                <div key={msg.id} className={`support-msg${mine ? ' mine' : ' theirs'}${isNew ? ' new' : ''}`}>
+                  <div className="support-bubble">{msg.message}</div>
+                  <div className="support-msg-time">{fmtTime(msg.created_at)}</div>
+                </div>
+              )
+            })
+          )}
+          <div ref={messagesEnd} />
+        </div>
+      )}
+
+      {/* ── Reply bar ────────────────────────────────────────────────────── */}
+      {(selectedTicket || (!isAdmin && !loadingTickets && !globalError)) && (
+        <>
           {sendError && (
             <p style={{ margin: '0 12px 4px', fontSize: 12, color: 'var(--danger)' }}>{sendError}</p>
           )}
 
-          {selectedTicket.status !== 'closed' ? (
+          {inputDisabled ? (
+            <div className="support-closed-notice">Обращение закрыто</div>
+          ) : (
             <div className="support-reply-bar">
               <textarea
                 ref={replyRef}
@@ -418,20 +420,18 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
                 placeholder="Сообщение… (Enter — отправить)"
                 rows={1}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSendReply() }
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSend() }
                 }}
               />
               <button
                 className="support-send-btn"
-                onClick={() => void handleSendReply()}
+                onClick={() => void handleSend()}
                 disabled={sending || !reply.trim()}
                 aria-label="Отправить"
               >
                 {sending ? '…' : '➤'}
               </button>
             </div>
-          ) : (
-            <div className="support-closed-notice">Обращение закрыто</div>
           )}
         </>
       )}
