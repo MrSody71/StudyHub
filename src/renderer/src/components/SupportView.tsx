@@ -241,6 +241,17 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
           {selectedTicket ? selectedTicket.subject : 'Поддержка'}
         </span>
 
+        {/* New ticket button — in header, always visible for users */}
+        {!isAdmin && !selectedTicket && (
+          <button
+            className="btn btn-primary btn-sm"
+            style={{ flexShrink: 0 }}
+            onClick={() => { setFormError(null); setShowNewForm(true) }}
+          >
+            + Обращение
+          </button>
+        )}
+
         {isAdmin && selectedTicket && (
           <select
             className="support-status-select"
@@ -253,7 +264,7 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
           </select>
         )}
 
-        <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ marginLeft: 'auto', flexShrink: 0 }}>✕</button>
+        <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ flexShrink: 0 }}>✕</button>
       </div>
 
       {/* ── Ticket list ───────────────────────────────────────────────────── */}
@@ -276,19 +287,6 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
                   {s === 'all' ? 'Все' : STATUS_LABELS[s as TicketStatus]}
                 </button>
               ))}
-            </div>
-          )}
-
-          {/* New ticket button (user only) */}
-          {!isAdmin && !globalError && (
-            <div style={{ padding: '10px 12px 4px' }}>
-              <button
-                className="btn btn-primary"
-                style={{ width: '100%' }}
-                onClick={() => { setFormError(null); setShowNewForm(true) }}
-              >
-                + Новое обращение
-              </button>
             </div>
           )}
 
@@ -388,7 +386,7 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
 
       {/* ── New ticket modal ─────────────────────────────────────────────── */}
       {showNewForm && (
-        <div className="modal-overlay" onClick={() => setShowNewForm(false)}>
+        <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setShowNewForm(false)}>
           <div className="modal" style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <span className="modal-title">Новое обращение</span>
