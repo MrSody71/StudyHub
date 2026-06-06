@@ -4576,23 +4576,11 @@ body {
 
 /* ── Support FAB + floating panel ───────────────────────────────────────── */
 
-.support-fab-wrap {
-  position:       fixed;
-  bottom:         24px;
-  right:          24px;
-  z-index:        1100;
-  display:        flex;
-  flex-direction: column;
-  align-items:    flex-end;
-  gap:            12px;
-  pointer-events: none;
-}
-
-.support-fab,
-.support-panel { pointer-events: auto; }
-
 .support-fab {
-  position:        relative;
+  position:        fixed;
+  bottom:          24px;
+  right:           24px;
+  z-index:         1100;
   width:           52px;
   height:          52px;
   border-radius:   50%;
@@ -4606,7 +4594,6 @@ body {
   justify-content: center;
   box-shadow:      0 4px 16px rgba(80,70,229,.40);
   transition:      transform .15s, box-shadow .15s;
-  flex-shrink:     0;
 }
 .support-fab:hover  { transform: scale(1.08); box-shadow: 0 6px 20px rgba(80,70,229,.5); }
 .support-fab:active { transform: scale(.95); }
@@ -4630,6 +4617,10 @@ body {
 }
 
 .support-panel {
+  position:      fixed;
+  bottom:        88px;
+  right:         24px;
+  z-index:       1099;
   width:         380px;
   height:        520px;
   background:    var(--bg-panel);
@@ -4906,13 +4897,12 @@ body {
 
 
 @media (max-width: 768px) {
-  .support-fab-wrap {
+  .support-fab {
     bottom: 76px;
     right:  16px;
   }
 
   .support-panel {
-    position:      fixed;
     bottom:        0;
     right:         0;
     left:          0;

@@ -1214,24 +1214,24 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Support FAB + floating panel ──────────────────────────────────── */}
-      <div className="support-fab-wrap">
-        {showSupport && (
-          <div className="support-panel">
-            <SupportView onUnreadChange={handleSupportUnread} onClose={() => setShowSupport(false)} />
-          </div>
+      {/* ── Support floating panel ────────────────────────────────────────── */}
+      {showSupport && (
+        <div className="support-panel">
+          <SupportView onUnreadChange={handleSupportUnread} onClose={() => setShowSupport(false)} />
+        </div>
+      )}
+
+      {/* ── Support FAB ───────────────────────────────────────────────────── */}
+      <button
+        className="support-fab"
+        onClick={() => setShowSupport((v) => !v)}
+        aria-label="Поддержка"
+      >
+        💬
+        {supportUnread > 0 && !showSupport && (
+          <span className="support-fab-badge">{supportUnread}</span>
         )}
-        <button
-          className="support-fab"
-          onClick={() => setShowSupport((v) => !v)}
-          aria-label="Поддержка"
-        >
-          💬
-          {supportUnread > 0 && !showSupport && (
-            <span className="support-fab-badge">{supportUnread}</span>
-          )}
-        </button>
-      </div>
+      </button>
 
       {showSettings && (
         <SettingsPanel
