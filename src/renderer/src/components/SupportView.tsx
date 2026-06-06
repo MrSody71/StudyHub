@@ -42,6 +42,7 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
   const [formError, setFormError]           = useState<string | null>(null)
   const [reply, setReply]                   = useState('')
   const [sending, setSending]               = useState(false)
+  const [sendError, setSendError]           = useState<string | null>(null)
   const [showNewForm, setShowNewForm]       = useState(false)
   const [newSubject, setNewSubject]         = useState('')
   const [newMessage, setNewMessage]         = useState('')
@@ -91,6 +92,13 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
 
   useEffect(() => { void loadTickets() }, [loadTickets])
 
+  // Auto-open new ticket form when user has no tickets
+  useEffect(() => {
+    if (!loadingTickets && !isAdmin && tickets.length === 0 && !globalError && !selectedTicket) {
+      setShowNewForm(true)
+    }
+  }, [loadingTickets, isAdmin, tickets.length, globalError, selectedTicket])
+
   // ── Messages ───────────────────────────────────────────────────────────────
 
   const loadMessages = useCallback(async (ticketId: string) => {
@@ -115,6 +123,7 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
   }, [isAdmin])
 
   useEffect(() => {
+    setSendError(null)
     if (!selectedTicket) { setMessages([]); return }
     setLoadingMsgs(true)
     loadMessages(selectedTicket.id).then(async () => {
@@ -153,7 +162,8 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
   async function handleCreateTicket() {
     if (!newSubject.trim() || !newMessage.trim()) return
     const sb = getSupabase()
-    if (!sb || !userProfile) return
+    if (!sb) { setFormError('Поддержка доступна только в облачной версии'); return }
+    if (!userProfile) { setFormError('Войдите в аккаунт, чтобы обратиться в поддержку'); return }
     setCreating(true)
     setFormError(null)
     try {
@@ -184,9 +194,11 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
 
   async function handleSendReply() {
     const text = reply.trim()
-    if (!text || !selectedTicket || !userProfile) return
+    if (!text || !selectedTicket) return
+    setSendError(null)
+    if (!userProfile) { setSendError('Войдите в аккаунт'); return }
     const sb = getSupabase()
-    if (!sb) return
+    if (!sb) { setSendError('Нет подключения к Supabase'); return }
     setSending(true)
     setReply('')
     const { error } = await sb.from('support_messages').insert({
@@ -195,7 +207,8 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
       message:   text,
     })
     if (error) {
-      setReply(text) // restore on failure
+      setReply(text)
+      setSendError(error.message)
     } else {
       await loadMessages(selectedTicket.id)
       void loadTickets()
@@ -390,6 +403,10 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
             )}
             <div ref={messagesEnd} />
           </div>
+
+          {sendError && (
+            <p style={{ margin: '0 12px 4px', fontSize: 12, color: 'var(--danger)' }}>{sendError}</p>
+          )}
 
           {selectedTicket.status !== 'closed' ? (
             <div className="support-reply-bar">
