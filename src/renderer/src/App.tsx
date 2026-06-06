@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Subject, Task, Attachment, Subtask, Tag, ScheduleEntry, BatchImportEntry, BatchImportResult, TulguStatus, Grade, SubjectGradeStat, Note, Semester, Theme, SubjectSort, AppView } from './types'
 import { AuthContext, type UserProfile } from './contexts/AuthContext'
 import Dashboard from './components/Dashboard'
@@ -15,6 +15,7 @@ import PomodoroTimer from './components/PomodoroTimer'
 import StudyStats from './components/StudyStats'
 import SettingsPanel from './components/SettingsPanel'
 import WalletView from './components/WalletView'
+import SupportView from './components/SupportView'
 import LoadingScreen from './components/LoadingScreen'
 import AuthScreen from './components/AuthScreen'
 import CloudStatus from './components/CloudStatus'
@@ -64,6 +65,8 @@ export default function App() {
   const [error, setError]                   = useState<string | null>(null)
 
   const [sessionVersion, setSessionVersion] = useState(0)
+  const [supportUnread,  setSupportUnread]  = useState(0)
+  const handleSupportUnread = useCallback((n: number) => setSupportUnread(n), [])
 
   // ── Supabase auth state ──────────────────────────────────────────────────
   type AuthStatus = 'init' | 'local' | 'unauthenticated' | 'authenticated'
@@ -924,6 +927,7 @@ export default function App() {
            : view === 'schedule' ? 'Расписание'
            : view === 'calendar' ? 'Календарь'
            : view === 'wallet'   ? 'Кошелёк'
+           : view === 'support'  ? 'Поддержка'
            : 'Таймер'}
         </span>
         <div className="mobile-top-bar-actions">
@@ -965,6 +969,10 @@ export default function App() {
           </button>
           <button className={`view-nav-btn${view === 'wallet' ? ' active' : ''}`} onClick={() => setView('wallet')}>
             <span className="view-nav-icon">💳</span> Кошелёк
+          </button>
+          <button className={`view-nav-btn${view === 'support' ? ' active' : ''}`} onClick={() => setView('support')}>
+            <span className="view-nav-icon">💬</span> Поддержка
+            {supportUnread > 0 && <span className="nav-unread-badge">{supportUnread}</span>}
           </button>
 
         </div>
@@ -1022,6 +1030,7 @@ export default function App() {
         view={view}
         pomRunning={pomState.status === 'running'}
         isAdmin={isAdmin}
+        supportUnread={supportUnread}
         onNavigate={(v) => { setView(v); setSelectedTaskId(null) }}
         onSettings={() => setShowSettings(true)}
         onClose={() => setShowDrawer(false)}
@@ -1207,6 +1216,13 @@ export default function App() {
       {view === 'wallet' && (
         <div className="full-content-panel">
           <WalletView />
+        </div>
+      )}
+
+      {/* ── Support view ──────────────────────────────────────────────────── */}
+      {view === 'support' && (
+        <div className="full-content-panel">
+          <SupportView onUnreadChange={handleSupportUnread} />
         </div>
       )}
 

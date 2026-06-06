@@ -2,7 +2,7 @@ export type TaskStatus   = 'not_started' | 'in_progress' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high'
 export type Theme        = 'light' | 'dark'
 export type SubjectSort  = 'alpha' | 'semester' | 'grade'
-export type AppView      = 'dashboard' | 'subjects' | 'tasks' | 'schedule' | 'calendar' | 'timer' | 'wallet'
+export type AppView      = 'dashboard' | 'subjects' | 'tasks' | 'schedule' | 'calendar' | 'timer' | 'wallet' | 'support'
 
 export interface Semester {
   id:         number
@@ -305,6 +305,31 @@ export interface WalletStats {
   balance:      number
   byCategory:   WalletCategoryStat[]
   byDay:        WalletDayStat[]
+}
+
+// ── Support ───────────────────────────────────────────────────────────────────
+
+export type TicketStatus = 'open' | 'in_progress' | 'closed'
+
+export interface SupportTicket {
+  id:         string
+  user_id:    string
+  subject:    string
+  status:     TicketStatus
+  created_at: string
+  updated_at: string
+  // Present in admin RPC result
+  email?:     string
+  unread?:    number
+}
+
+export interface SupportMessage {
+  id:         string
+  ticket_id:  string
+  sender:     'user' | 'admin'
+  message:    string
+  is_read:    boolean
+  created_at: string
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
