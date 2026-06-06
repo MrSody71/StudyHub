@@ -229,8 +229,13 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
 
       {/* ── Panel header ─────────────────────────────────────────────────── */}
       <div className="support-widget-header">
-        {selectedTicket ? (
-          <button className="support-widget-back btn btn-ghost btn-sm" onClick={() => { setSelectedTicket(null); setReply('') }}>
+        {(selectedTicket || showNewForm) ? (
+          <button className="support-widget-back btn btn-ghost btn-sm" onClick={() => {
+            setSelectedTicket(null)
+            setReply('')
+            setShowNewForm(false)
+            setFormError(null)
+          }}>
             ←
           </button>
         ) : (
@@ -238,15 +243,15 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
         )}
 
         <span className="support-widget-title">
-          {selectedTicket ? selectedTicket.subject : 'Поддержка'}
+          {selectedTicket ? selectedTicket.subject : showNewForm ? 'Новое обращение' : 'Поддержка'}
         </span>
 
-        {/* New ticket button — in header, always visible for users */}
-        {!isAdmin && !selectedTicket && (
+        {/* New ticket button — visible for users on ticket list */}
+        {!isAdmin && !selectedTicket && !showNewForm && (
           <button
             className="btn btn-primary btn-sm"
             style={{ flexShrink: 0 }}
-            onClick={() => { setFormError(null); setShowNewForm(true) }}
+            onClick={() => { setFormError(null); setNewSubject(''); setNewMessage(''); setShowNewForm(true) }}
           >
             + Обращение
           </button>
@@ -267,8 +272,38 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
         <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ flexShrink: 0 }}>✕</button>
       </div>
 
+      {/* ── New ticket inline form ────────────────────────────────────────── */}
+      {!selectedTicket && showNewForm && (
+        <div className="support-new-form">
+          <input
+            className="input"
+            placeholder="Тема обращения"
+            value={newSubject}
+            onChange={(e) => setNewSubject(e.target.value)}
+            autoFocus
+          />
+          <textarea
+            className="input support-new-message"
+            placeholder="Опишите вашу проблему…"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+          />
+          {formError && <p className="support-form-error">{formError}</p>}
+          <div className="support-new-actions">
+            <button className="btn btn-secondary btn-sm" onClick={() => { setShowNewForm(false); setFormError(null) }}>Отмена</button>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => void handleCreateTicket()}
+              disabled={creating || !newSubject.trim() || !newMessage.trim()}
+            >
+              {creating ? 'Отправка…' : 'Отправить'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Ticket list ───────────────────────────────────────────────────── */}
-      {!selectedTicket && (
+      {!selectedTicket && !showNewForm && (
         <div className="support-widget-list">
           {/* Error / no supabase */}
           {globalError && (
@@ -384,45 +419,6 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
         </>
       )}
 
-      {/* ── New ticket modal ─────────────────────────────────────────────── */}
-      {showNewForm && (
-        <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setShowNewForm(false)}>
-          <div className="modal" style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title">Новое обращение</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowNewForm(false)}>✕</button>
-            </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <input
-                className="input"
-                placeholder="Тема обращения"
-                value={newSubject}
-                onChange={(e) => setNewSubject(e.target.value)}
-                autoFocus
-              />
-              <textarea
-                className="input"
-                placeholder="Опишите вашу проблему…"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                rows={5}
-                style={{ resize: 'vertical' }}
-              />
-              {formError && <p style={{ color: 'var(--danger)', fontSize: 13, margin: 0 }}>{formError}</p>}
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowNewForm(false)}>Отмена</button>
-              <button
-                className="btn btn-primary"
-                onClick={() => void handleCreateTicket()}
-                disabled={creating || !newSubject.trim() || !newMessage.trim()}
-              >
-                {creating ? 'Отправка…' : 'Отправить'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
