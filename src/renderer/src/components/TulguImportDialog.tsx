@@ -123,16 +123,24 @@ export default function TulguImportDialog({ onImport, onClose }: Props) {
     if (!g) { setError('Введите номер группы'); return }
     setError(null)
     setLoading(true)
+
+    // Save group number BEFORE the API call so it persists even if fetch fails
+    const cfgR = await window.api.tulgu.getConfig().catch(() => null)
+    const currentInterval = cfgR?.success ? cfgR.data.interval : 'manual'
+    await window.api.tulgu.saveConfig({ groupNumber: g, interval: currentInterval }).catch(() => {})
+
     try {
       const r = await window.api.tulgu.fetchTulsuSchedule(g)
-      if (!r.success) throw new Error(r.error)
+      if (!r.success) throw new Error(r.error ?? 'Ошибка загрузки расписания')
       if (r.data.length === 0) {
         throw new Error('Расписание пустое — проверьте номер группы или попробуйте позже')
       }
       setPreview(r.data)
       setStep('preview')
-    } catch (e) {
-      setError(String(e))
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message
+        : (e as { message?: string }).message ?? 'Неизвестная ошибка'
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -144,17 +152,15 @@ export default function TulguImportDialog({ onImport, onClose }: Props) {
     setError(null)
     setLoading(true)
     try {
-      // Save group number to settings so it's remembered
-      await window.api.tulgu.saveConfig({
-        groupNumber: groupNumber.trim(),
-        interval: 'manual',   // don't change interval on manual import
-      }).catch(() => {/* non-fatal */})
+      // Group number already saved in handleFetch; nothing extra needed here
 
       const result = await onImport(preview, replaceMode === 'replace')
       setImportResult(result)
       setStep('done')
-    } catch (e) {
-      setError(String(e))
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message
+        : (e as { message?: string }).message ?? 'Неизвестная ошибка'
+      setError(msg)
     } finally {
       setLoading(false)
     }

@@ -28,6 +28,26 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
 }
 
+/** Extract a human-readable error message from any thrown value */
+function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message
+  if (e && typeof e === 'object') {
+    const obj = e as Record<string, unknown>
+    if (typeof obj.message === 'string') return obj.message
+    return JSON.stringify(obj)
+  }
+  return String(e)
+}
+
+/** True when a Supabase error means the table doesn't exist yet */
+function isTableMissing(e: unknown): boolean {
+  if (e && typeof e === 'object') {
+    const obj = e as Record<string, unknown>
+    return obj.code === '42P01' || /does not exist/i.test(String(obj.message))
+  }
+  return false
+}
+
 export default function SupportView({ onUnreadChange, onClose }: Props) {
   const { userProfile } = useAuth()
   const isAdmin = userProfile?.role === 'admin'
@@ -65,8 +85,11 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
 
     if (isAdmin) {
       const { data, error } = await sb.rpc('get_support_tickets_for_admin')
-      if (error) { setGlobalError(error.message) }
-      else {
+      if (error) {
+        setGlobalError(
+          isTableMissing(error) ? 'Раздел поддержки ещё не настроен' : error.message
+        )
+      } else {
         const rows = (data as SupportTicket[]) ?? []
         setTickets(rows)
         onUnreadChange(rows.reduce((s, t) => s + (t.unread ?? 0), 0))
@@ -76,8 +99,11 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
         .from('support_tickets')
         .select('*')
         .order('updated_at', { ascending: false })
-      if (error) { setGlobalError(error.message) }
-      else {
+      if (error) {
+        setGlobalError(
+          isTableMissing(error) ? 'Раздел поддержки ещё не настроен' : error.message
+        )
+      } else {
         const rows = (data as SupportTicket[]) ?? []
         setTickets(rows)
         const { count } = await sb
@@ -180,23 +206,46 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
           .insert({ user_id: userProfile.id, subject })
           .select()
           .single()
-        if (error) throw error
+        if (error) {
+          throw isTableMissing(error)
+            ? new Error('Раздел поддержки ещё не настроен')
+            : new Error(error.message)
+        }
         ticket = data as SupportTicket
         setSelectedTicket(ticket)
       }
+
+      // Add message optimistically so it appears immediately
+      const tempId = `temp-${Date.now()}`
+      const optimistic: SupportMessage = {
+        id:         tempId,
+        ticket_id:  ticket.id,
+        sender:     isAdmin ? 'admin' : 'user',
+        message:    text,
+        is_read:    false,
+        created_at: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, optimistic])
 
       const { error } = await sb.from('support_messages').insert({
         ticket_id: ticket.id,
         sender:    isAdmin ? 'admin' : 'user',
         message:   text,
       })
-      if (error) throw error
+      if (error) {
+        // Roll back optimistic message
+        setMessages((prev) => prev.filter((m) => m.id !== tempId))
+        throw isTableMissing(error)
+          ? new Error('Раздел поддержки ещё не настроен')
+          : new Error(error.message)
+      }
 
+      // Replace optimistic message with real server data
       await loadMessages(ticket.id)
       void loadTickets()
     } catch (e: unknown) {
       setReply(text)
-      setSendError(e instanceof Error ? e.message : String(e))
+      setSendError(errMsg(e))
     }
 
     setSending(false)

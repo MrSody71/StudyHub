@@ -217,6 +217,8 @@ export default function PomodoroTimer({ state, controls, subjects, tasks }: Prop
             <select
               className="form-select"
               value={subjectId ?? ''}
+              disabled={status === 'running'}
+              style={status === 'running' ? { opacity: 0.5, cursor: 'not-allowed', pointerEvents: 'none' } : {}}
               onChange={(e) => {
                 const id = e.target.value === '' ? null : Number(e.target.value)
                 controls.setSubjectId(id)
@@ -236,6 +238,8 @@ export default function PomodoroTimer({ state, controls, subjects, tasks }: Prop
               <select
                 className="form-select"
                 value={taskId ?? ''}
+                disabled={status === 'running'}
+                style={status === 'running' ? { opacity: 0.5, cursor: 'not-allowed', pointerEvents: 'none' } : {}}
                 onChange={(e) => controls.setTaskId(e.target.value === '' ? null : Number(e.target.value))}
               >
                 <option value="">— Без задания —</option>

@@ -102,13 +102,15 @@ export function setupIpcHandlers(): void {
 
   // ── ТулГУ config & sync ───────────────────────────────────────────────────
   ipcMain.handle('tulgu:getConfig', () => wrap(() => ({
-    groupNumber: getSetting('tulgu.groupNumber') ?? '',
-    interval:    getSetting('tulgu.interval')    ?? 'manual',
+    // Read from new key first, fall back to old key for backward compat
+    groupNumber: getSetting('tulgu_group') ?? getSetting('tulgu.groupNumber') ?? '',
+    interval:    getSetting('tulgu.interval') ?? 'manual',
   })))
 
   ipcMain.handle('tulgu:saveConfig', (_e, data: {
     groupNumber: string; interval: string;
   }) => wrap(() => {
+    setSetting('tulgu_group',       data.groupNumber)
     setSetting('tulgu.groupNumber', data.groupNumber)
     setSetting('tulgu.interval',    data.interval)
     restartTulguScheduler()

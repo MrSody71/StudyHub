@@ -109,8 +109,8 @@ export default function TulguPanel({ status, onClose, onScheduleRefresh }: Props
       // Refresh live status counter
       const s = await window.api.tulgu.getStatus()
       if (s.success) setLiveStatus(s.data)
-    } catch (e) {
-      setSyncError(String(e))
+    } catch (e: unknown) {
+      setSyncError(e instanceof Error ? e.message : (e as { message?: string }).message ?? String(e))
       const s = await window.api.tulgu.getStatus()
       if (s.success) setLiveStatus(s.data)
     } finally {

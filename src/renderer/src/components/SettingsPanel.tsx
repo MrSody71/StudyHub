@@ -140,8 +140,8 @@ export default function SettingsPanel({ theme, tags, subjects, gradeScale, appVe
       }
       const s = await window.api.tulgu.getStatus()
       if (s.success) setTulguLiveStatus(s.data)
-    } catch (e) {
-      setTulguSyncError(String(e))
+    } catch (e: unknown) {
+      setTulguSyncError(e instanceof Error ? e.message : (e as { message?: string }).message ?? String(e))
       const s = await window.api.tulgu.getStatus()
       if (s.success) setTulguLiveStatus(s.data)
     } finally {

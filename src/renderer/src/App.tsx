@@ -315,10 +315,11 @@ export default function App() {
   }
 
   // ── Subject handlers ─────────────────────────────────────────────────────
-  async function handleCreateSubject(data: { name: string; color: string; description?: string | null }) {
+  async function handleCreateSubject(data: { name: string; color: string; description?: string | null; semester_id?: number | null }) {
     const s = await unwrap(window.api.subjects.create(data))
-    setSubjects((prev) => [...prev, s].sort((a, b) => a.name.localeCompare(b.name)))
+    setSubjects((prev) => [...prev, s].sort((a, b) => a.name.localeCompare(b.name, 'ru')))
     setSelectedSubjectId(s.id)
+    setView('tasks')
     if (supaUser) pushRow('subjects', s as Record<string, unknown>, supaUser.id)
   }
 
