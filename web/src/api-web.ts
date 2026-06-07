@@ -1585,8 +1585,15 @@ export function buildWebApi(): Window['api'] {
     },
     tulgu: {
       fetchTulsuSchedule: tulguFetchTulsuSchedule,
-      getConfig:          () => Promise.resolve(ok<TulguConfig>({ groupNumber: '', interval: 'manual' })),
-      saveConfig:         (_) => Promise.resolve(ok(null)),
+      getConfig:          () => Promise.resolve(ok<TulguConfig>({
+        groupNumber: localStorage.getItem('studyhub.settings.tulgu_group') ?? '',
+        interval:    localStorage.getItem('studyhub.settings.tulgu.interval') ?? 'manual',
+      })),
+      saveConfig: (data) => {
+        localStorage.setItem('studyhub.settings.tulgu_group', data.groupNumber)
+        localStorage.setItem('studyhub.settings.tulgu.interval', data.interval)
+        return Promise.resolve(ok(null))
+      },
       getStatus:          () => Promise.resolve(ok(tulguStubStatus)),
       syncNow:            () => Promise.resolve(ok<TulguSyncResult>({ changed: false, diff: { added: [], removed: [], moved: [] } })),
       onStatusChanged:    (_cb) => { /* no-op */ },
