@@ -83,6 +83,7 @@ export default function App() {
   // ── Sync state ───────────────────────────────────────────────────────────
   const [syncStatus,  setSyncStatus]  = useState<SyncStatus>('idle')
   const [lastSyncAt,  setLastSyncAt]  = useState<string | null>(null)
+  const [syncNote,    setSyncNote]    = useState<string | null>(null)
 
   // ── Auto-updater state ───────────────────────────────────────────────────
   type UpdateStage = 'available' | 'downloading' | 'downloaded'
@@ -289,6 +290,24 @@ export default function App() {
       if (r.success && r.data) setGradeScale(Number(r.data))
     } catch { /* keep default */ }
   }
+
+  /** Reload all view-data. Call after sync or auth to refresh UI. */
+  function reloadAllData() {
+    void loadSubjects()
+    void loadArchivedSubjects()
+    void loadSemesters()
+    void loadTags()
+    void loadScheduleEntries()
+    void loadGradeStats()
+    void loadAllGrades()
+  }
+
+  // Auto-dismiss sync note after 5 s
+  useEffect(() => {
+    if (!syncNote) return
+    const id = setTimeout(() => setSyncNote(null), 5_000)
+    return () => clearTimeout(id)
+  }, [syncNote])
 
   async function loadSubjectSort() {
     try {
@@ -774,44 +793,70 @@ export default function App() {
 
   // ── Sync helpers ─────────────────────────────────────────────────────────
 
+  const SYNC_TIMEOUT_MS = 10_000
+
   async function startupSync(userId: string) {
     const lastR = await window.api.settings.get('sync.last_sync_at')
     const since = (lastR.success && lastR.data) ? lastR.data : null
     setLastSyncAt(since)
+
+    // Show whatever data is already available — don't block on sync
+    reloadAllData()
+
     setSyncStatus('syncing')
+    let settled = false
+
+    const timeoutHandle = setTimeout(() => {
+      if (settled) return
+      settled = true
+      // Timeout: silently stop the spinner — data already loaded above
+      setSyncStatus('idle')
+    }, SYNC_TIMEOUT_MS)
+
     try {
       const now = await runSync(userId, since)
+      if (settled) return  // timeout already fired — ignore stale result
+      settled = true
+      clearTimeout(timeoutHandle)
       setLastSyncAt(now)
       setSyncStatus('idle')
-      // Reload all data after pull
-      void loadSubjects()
-      void loadArchivedSubjects()
-      void loadSemesters()
-      void loadTags()
-      void loadScheduleEntries()
-      void loadGradeStats()
-      void loadAllGrades()
+      reloadAllData()
     } catch {
-      setSyncStatus('error')
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutHandle)
+      setSyncStatus('idle')
+      setSyncNote('Синхронизация недоступна')
     }
   }
 
   async function handleManualSync() {
     if (!supaUser || syncStatus === 'syncing') return
     setSyncStatus('syncing')
+    setSyncNote(null)
+    let settled = false
+
+    const timeoutHandle = setTimeout(() => {
+      if (settled) return
+      settled = true
+      setSyncStatus('idle')
+      setSyncNote('Синхронизация недоступна')
+    }, SYNC_TIMEOUT_MS)
+
     try {
       const now = await runSync(supaUser.id, lastSyncAt)
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutHandle)
       setLastSyncAt(now)
       setSyncStatus('idle')
-      void loadSubjects()
-      void loadArchivedSubjects()
-      void loadSemesters()
-      void loadTags()
-      void loadScheduleEntries()
-      void loadGradeStats()
-      void loadAllGrades()
+      reloadAllData()
     } catch {
-      setSyncStatus('error')
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutHandle)
+      setSyncStatus('idle')
+      setSyncNote('Синхронизация недоступна')
     }
   }
 
@@ -1317,6 +1362,29 @@ export default function App() {
           onSetActive={handleSetActiveSemester}
           onClose={() => setShowSemesterMgr(false)}
         />
+      )}
+
+      {/* ── Sync note toast ──────────────────────────────────────────────── */}
+      {syncNote && (
+        <div
+          role="status"
+          style={{
+            position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+            background: 'var(--surface, #fff)', border: '1px solid var(--border, #e5e7eb)',
+            borderRadius: 8, padding: '8px 18px', fontSize: 13,
+            color: 'var(--text-secondary, #6b7280)', zIndex: 9999,
+            boxShadow: '0 4px 12px rgba(0,0,0,.12)', whiteSpace: 'nowrap',
+            display: 'flex', alignItems: 'center', gap: 8,
+          }}
+        >
+          <span style={{ color: '#f59e0b' }}>⚠</span>
+          {syncNote}
+          <button
+            onClick={() => setSyncNote(null)}
+            style={{ marginLeft: 4, background: 'none', border: 'none', cursor: 'pointer',
+                     color: 'var(--text-tertiary, #9ca3af)', fontSize: 14, padding: 0 }}
+          >✕</button>
+        </div>
       )}
 
     </div>}
