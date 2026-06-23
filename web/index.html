@@ -9,6 +9,22 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      console.log('[StudyHub] inline script OK');
+      window.addEventListener('error', function(e) {
+        console.error('[StudyHub] Global error:', e.message, e.filename, e.lineno);
+        document.title = 'ERROR: ' + e.message;
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        console.error('[StudyHub] Unhandled rejection:', e.reason);
+      });
+      setTimeout(function() {
+        if (!document.querySelector('.loading-screen') && !document.querySelector('.app')) {
+          document.title = 'JS NOT LOADED';
+          console.error('[StudyHub] React did not mount after 5s');
+        }
+      }, 5000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
