@@ -120,7 +120,12 @@ export default function App() {
     void loadAllGrades()
     void loadGradeScale()
     void loadSubjectSort()
-    void initAuth()
+    void initAuth().catch(() => setAuthStatus('local'))
+
+    // Global safety net: if auth is still 'init' after 10s, force local mode
+    const authGuard = setTimeout(() => {
+      setAuthStatus((prev) => (prev === 'init' ? 'local' : prev))
+    }, 10_000)
 
     // Load initial TulGU status
     void window.api.tulgu.getStatus().then((r) => {
@@ -179,6 +184,8 @@ export default function App() {
         }
       } catch { /* ignore — errors reported via moodle:sync-progress */ }
     })()
+
+    return () => clearTimeout(authGuard)
   }, [])
 
   // Reload view-specific data when switching views
