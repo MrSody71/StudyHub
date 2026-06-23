@@ -120,12 +120,17 @@ export default function App() {
     void loadAllGrades()
     void loadGradeScale()
     void loadSubjectSort()
-    void initAuth().catch(() => setAuthStatus('local'))
+    console.log('[StudyHub] useEffect: starting initAuth...')
+    void initAuth().catch((e) => {
+      console.error('[StudyHub] initAuth crashed:', e)
+      setAuthStatus('local')
+    })
 
-    // Global safety net: if auth is still 'init' after 10s, force local mode
+    // Global safety net: if auth is still 'init' after 3s, force local mode
     const authGuard = setTimeout(() => {
+      console.log('[StudyHub] safety net fired — forcing local mode')
       setAuthStatus((prev) => (prev === 'init' ? 'local' : prev))
-    }, 10_000)
+    }, 3_000)
 
     // Load initial TulGU status
     void window.api.tulgu.getStatus().then((r) => {
@@ -684,15 +689,18 @@ export default function App() {
   }
 
   async function initAuth() {
+    console.log('[StudyHub] initAuth: reading settings...')
     const urlR = await window.api.settings.get('supabase_url')
     const keyR = await window.api.settings.get('supabase_anon_key')
     const url  = urlR.success ? urlR.data : null
     const key  = keyR.success ? keyR.data : null
+    console.log('[StudyHub] initAuth: url=', url ? 'set' : 'null', 'key=', key ? 'set' : 'null')
 
     if (url) setSupabaseUrl(url)
     if (key) setSupabaseKey(key)
 
     if (!url || !key) {
+      console.log('[StudyHub] initAuth: no credentials → local mode')
       setAuthStatus('local')
       return
     }
