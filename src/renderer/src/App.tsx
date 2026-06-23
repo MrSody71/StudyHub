@@ -693,7 +693,13 @@ export default function App() {
     setSupaConfigured(true)
     try {
       const sb = initSupabase(url, key)
-      const { data: { session } } = await sb.auth.getSession()
+      const sessionResult = await Promise.race([
+        sb.auth.getSession(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Supabase timeout')), 8000),
+        ),
+      ])
+      const { data: { session } } = sessionResult
       if (session?.user) {
         const user = { email: session.user.email!, id: session.user.id }
         setSupaUser(user)
@@ -703,7 +709,7 @@ export default function App() {
         return
       }
     } catch {
-      // invalid URL/key → fall through to local
+      // invalid URL/key or timeout → fall through to local
       setAuthStatus('local')
       return
     }
