@@ -1,5 +1,33 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 
+// Whitelist of IPC channels the renderer is allowed to listen on / remove listeners from.
+const ALLOWED_RECEIVE_CHANNELS = new Set([
+  'tulgu:status-changed',
+  'tulgu:schedule-updated',
+  'moodle:sync-progress',
+  'updater:update-available',
+  'updater:update-not-available',
+  'updater:download-progress',
+  'updater:update-downloaded',
+  'updater:error',
+])
+
+function safeOn(channel: string, listener: (...args: unknown[]) => void): void {
+  if (!ALLOWED_RECEIVE_CHANNELS.has(channel)) {
+    console.warn(`[preload] Blocked ipcRenderer.on for unknown channel: ${channel}`)
+    return
+  }
+  ipcRenderer.on(channel, listener)
+}
+
+function safeRemoveAllListeners(channel: string): void {
+  if (!ALLOWED_RECEIVE_CHANNELS.has(channel)) {
+    console.warn(`[preload] Blocked removeAllListeners for unknown channel: ${channel}`)
+    return
+  }
+  ipcRenderer.removeAllListeners(channel)
+}
+
 const api = {
   subjects: {
     getAll:   (filter?: unknown)           => ipcRenderer.invoke('subjects:getAll', filter),
@@ -65,11 +93,11 @@ const api = {
     getStatus:  () => ipcRenderer.invoke('tulgu:getStatus'),
     syncNow:    () => ipcRenderer.invoke('tulgu:syncNow'),
     onStatusChanged:   (cb: (s: unknown) => void) =>
-      ipcRenderer.on('tulgu:status-changed',   (_e, s) => cb(s)),
+      safeOn('tulgu:status-changed',   (_e, s) => cb(s)),
     onScheduleUpdated: (cb: (d: unknown) => void) =>
-      ipcRenderer.on('tulgu:schedule-updated', (_e, d) => cb(d)),
+      safeOn('tulgu:schedule-updated', (_e, d) => cb(d)),
     removeAllListeners: (channel: string) =>
-      ipcRenderer.removeAllListeners(channel),
+      safeRemoveAllListeners(channel),
     // Generic API proxy (for custom URLs)
     fetchGroups:   (baseUrl: string, token: string, entityType: string) =>
       ipcRenderer.invoke('tulgu:fetchGroups', baseUrl, token, entityType),
@@ -137,8 +165,8 @@ const api = {
     unmapCourse: (moodleCourseId: number) => ipcRenderer.invoke('moodle:unmapCourse', moodleCourseId),
     syncAll:     ()                       => ipcRenderer.invoke('moodle:syncAll'),
     onSyncProgress: (cb: (p: unknown) => void) =>
-      ipcRenderer.on('moodle:sync-progress', (_e, p) => cb(p)),
-    removeAllListeners: (channel: string) => ipcRenderer.removeAllListeners(channel),
+      safeOn('moodle:sync-progress', (_e, p) => cb(p)),
+    removeAllListeners: (channel: string) => safeRemoveAllListeners(channel),
   },
   updater: {
     checkForUpdates: () => ipcRenderer.invoke('updater:checkForUpdates'),
@@ -146,17 +174,17 @@ const api = {
     quitAndInstall:  () => ipcRenderer.invoke('updater:quitAndInstall'),
     getVersion:      () => ipcRenderer.invoke('updater:getVersion'),
     onUpdateAvailable:    (cb: (info: { version: string }) => void) =>
-      ipcRenderer.on('updater:update-available', (_e: IpcRendererEvent, info) => cb(info)),
+      safeOn('updater:update-available', (_e: IpcRendererEvent, info) => cb(info)),
     onUpdateNotAvailable: (cb: () => void) =>
-      ipcRenderer.on('updater:update-not-available', () => cb()),
+      safeOn('updater:update-not-available', () => cb()),
     onDownloadProgress:   (cb: (percent: number) => void) =>
-      ipcRenderer.on('updater:download-progress', (_e: IpcRendererEvent, pct) => cb(pct)),
+      safeOn('updater:download-progress', (_e: IpcRendererEvent, pct) => cb(pct)),
     onUpdateDownloaded:   (cb: (info: { version: string }) => void) =>
-      ipcRenderer.on('updater:update-downloaded', (_e: IpcRendererEvent, info) => cb(info)),
+      safeOn('updater:update-downloaded', (_e: IpcRendererEvent, info) => cb(info)),
     onError:              (cb: (msg: string) => void) =>
-      ipcRenderer.on('updater:error', (_e: IpcRendererEvent, msg) => cb(msg)),
+      safeOn('updater:error', (_e: IpcRendererEvent, msg) => cb(msg)),
     removeAllListeners:   (channel: string) =>
-      ipcRenderer.removeAllListeners(channel),
+      safeRemoveAllListeners(channel),
   }
 }
 

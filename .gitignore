@@ -4,3 +4,9 @@ dist/
 .claude/
 *.log
 *.tsbuildinfo
+.vercel
+
+# Secrets / environment
+.env
+.env.*
+!.env.example

@@ -1,6 +1,7 @@
 import { ipcMain, dialog, BrowserWindow, Notification } from 'electron'
 import fs from 'fs'
 import path from 'path'
+import { isInsideUserData, sanitizeFilename } from '../pathSecurity'
 import { getAllSubjects, createSubject, updateSubject, deleteSubject, archiveSubject } from '../db/subjects'
 import { upsertRowFromRemote, getLocalChangesSince, replaceTaskTagsFromRemote, getLocalTaskTags } from '../db/sync'
 import { getAllSemesters, createSemester, updateSemester, deleteSemester, setActiveSemester } from '../db/semesters'
@@ -200,8 +201,22 @@ export function setupIpcHandlers(): void {
   })
 
   // ── Settings ──────────────────────────────────────────────────────────────
-  ipcMain.handle('settings:get', (_e, key: string) => wrap(() => getSetting(key)))
-  ipcMain.handle('settings:set', (_e, key: string, value: string) => wrap(() => { setSetting(key, value); return null }))
+  // Keys that should only be written by main-process code (e.g. moodle auth).
+  const PROTECTED_SETTING_KEYS = new Set([
+    'moodle.token', 'moodle.userId', 'moodle.fullname',
+    'moodle.lastSyncAt', 'moodle.lastError',
+  ])
+
+  ipcMain.handle('settings:get', (_e, key: string) => wrap(() => {
+    if (typeof key !== 'string') throw new Error('Invalid key')
+    return getSetting(key)
+  }))
+  ipcMain.handle('settings:set', (_e, key: string, value: string) => wrap(() => {
+    if (typeof key !== 'string' || typeof value !== 'string') throw new Error('Invalid args')
+    if (PROTECTED_SETTING_KEYS.has(key)) throw new Error('Setting is read-only')
+    setSetting(key, value)
+    return null
+  }))
 
   // ── Sync ──────────────────────────────────────────────────────────────────
   ipcMain.handle('sync:upsertRow', (_e, table: string, row: Record<string, unknown>) =>
@@ -286,13 +301,24 @@ export function setupIpcHandlers(): void {
       destDir: string
     ) => {
       try {
+        // Validate destDir is an existing directory
+        if (!destDir || !fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
+          return { success: false, error: 'Invalid destination directory' }
+        }
+
         let count = 0
         for (const file of files) {
+          // Security: only export files that live inside userData
+          if (!isInsideUserData(file.filepath)) {
+            console.warn('[security] Blocked export of file outside userData:', file.filepath)
+            continue
+          }
           if (!fs.existsSync(file.filepath)) continue
 
-          const ext      = path.extname(file.filename)
-          const base     = path.basename(file.filename, ext)
-          let destName   = file.filename
+          const safeName = sanitizeFilename(file.filename)
+          const ext      = path.extname(safeName)
+          const base     = path.basename(safeName, ext)
+          let destName   = safeName
           let destPath   = path.join(destDir, destName)
           let suffix     = 1
 

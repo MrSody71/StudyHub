@@ -2,6 +2,7 @@ import { getDb } from './database'
 import { app, shell } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import { sanitizeFilename } from '../pathSecurity'
 
 export interface AttachmentRow {
   id:                   number
@@ -66,8 +67,8 @@ export function addAttachment(taskId: number, sourcePath: string): AttachmentRow
   const dir = path.join(app.getPath('userData'), 'attachments', String(taskId))
   fs.mkdirSync(dir, { recursive: true })
 
-  // Prefix with timestamp to avoid name collisions
-  const storedName = `${Date.now()}_${filename}`
+  // Prefix with timestamp to avoid name collisions; sanitise to prevent traversal
+  const storedName = `${Date.now()}_${sanitizeFilename(filename)}`
   const destPath = path.join(dir, storedName)
 
   fs.copyFileSync(sourcePath, destPath)
@@ -187,7 +188,7 @@ export function addFolder(
 
   // Create destination directory
   const storageDir = path.join(app.getPath('userData'), 'attachments', String(taskId))
-  const destDir    = path.join(storageDir, `${Date.now()}_${displayName}`)
+  const destDir    = path.join(storageDir, `${Date.now()}_${sanitizeFilename(displayName)}`)
   fs.mkdirSync(destDir, { recursive: true })
 
   // Copy all files; clean up on failure
@@ -291,9 +292,10 @@ export function addMoodleAttachment(
   const dir = path.join(app.getPath('userData'), 'moodle-files', String(subjectId))
   fs.mkdirSync(dir, { recursive: true })
 
-  const ext       = path.extname(filename)
-  const base      = path.basename(filename, ext)
-  let destName    = filename
+  const safeName  = sanitizeFilename(filename)
+  const ext       = path.extname(safeName)
+  const base      = path.basename(safeName, ext)
+  let destName    = safeName
   let destPath    = path.join(dir, destName)
   let suffix      = 1
   // Avoid name collisions within the same subject folder

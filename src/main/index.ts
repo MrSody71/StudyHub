@@ -43,6 +43,18 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  // Prevent the renderer from navigating away to an external page (phishing, open-redirect).
+  // Only allow the dev-server origin and local file:// loads.
+  win.webContents.on('will-navigate', (event, url) => {
+    const parsed = new URL(url)
+    const isLocal = parsed.protocol === 'file:'
+    const isDevServer = !app.isPackaged && parsed.origin === new URL(process.env['ELECTRON_RENDERER_URL'] || 'http://localhost').origin
+    if (!isLocal && !isDevServer) {
+      event.preventDefault()
+      console.warn('[security] Blocked navigation to:', url)
+    }
+  })
+
   const devUrl = process.env['ELECTRON_RENDERER_URL']
 
   if (!app.isPackaged && devUrl) {
@@ -66,7 +78,7 @@ const CSP = [
   "default-src 'self'",
   isDev
     ? "script-src 'self' 'unsafe-eval' 'unsafe-inline'"
-    : "script-src 'self' 'unsafe-eval'",
+    : "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
   "font-src 'self' data:",
@@ -86,6 +98,23 @@ app.whenReady().then(() => {
         'Content-Security-Policy': [CSP],
       },
     })
+  })
+
+  // Block all permission requests the app doesn't need (camera, mic, geolocation, etc.)
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    const allowed = new Set(['notifications'])
+    if (allowed.has(permission)) {
+      callback(true)
+    } else {
+      console.warn('[security] Denied permission request:', permission)
+      callback(false)
+    }
+  })
+
+  // Also block permission checks (synchronous queries)
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    const allowed = new Set(['notifications'])
+    return allowed.has(permission)
   })
 
   initDatabase()
