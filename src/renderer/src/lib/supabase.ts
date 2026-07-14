@@ -25,7 +25,7 @@ export function initSupabase(url: string, anonKey: string): SupabaseClient {
       storageKey: 'studyhub-supabase-auth',
       storage: localStorage,
       detectSessionInUrl: false,
-      autoRefreshToken: false,
+      autoRefreshToken: true,
     },
   })
   return _client

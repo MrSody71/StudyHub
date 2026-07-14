@@ -43,9 +43,26 @@ function errMsg(e: unknown): string {
 function isTableMissing(e: unknown): boolean {
   if (e && typeof e === 'object') {
     const obj = e as Record<string, unknown>
-    return obj.code === '42P01' || /does not exist/i.test(String(obj.message))
+    return obj.code === '42P01'
   }
   return false
+}
+
+/** True when the JWT token has expired */
+function isJwtExpired(e: unknown): boolean {
+  if (e && typeof e === 'object') {
+    const obj = e as Record<string, unknown>
+    return obj.code === 'PGRST301' || /jwt expired/i.test(String(obj.message))
+  }
+  return false
+}
+
+/** Try to refresh the Supabase session; returns true on success */
+async function tryRefreshSession(): Promise<boolean> {
+  const sb = getSupabase()
+  if (!sb) return false
+  const { error } = await sb.auth.refreshSession()
+  return !error
 }
 
 export default function SupportView({ onUnreadChange, onClose }: Props) {
@@ -74,7 +91,7 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
 
   // ── Load tickets ──────────────────────────────────────────────────────────
 
-  const loadTickets = useCallback(async () => {
+  const loadTickets = useCallback(async (retried = false) => {
     const sb = getSupabase()
     if (!sb) {
       setGlobalError('Поддержка доступна только в облачной версии (Supabase)')
@@ -86,6 +103,10 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
     if (isAdmin) {
       const { data, error } = await sb.rpc('get_support_tickets_for_admin')
       if (error) {
+        if (!retried && isJwtExpired(error) && await tryRefreshSession()) {
+          return loadTickets(true)
+        }
+        console.error('[Support] admin RPC error:', JSON.stringify(error))
         setGlobalError(
           isTableMissing(error) ? 'Раздел поддержки ещё не настроен' : error.message
         )
@@ -100,6 +121,10 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
         .select('*')
         .order('updated_at', { ascending: false })
       if (error) {
+        if (!retried && isJwtExpired(error) && await tryRefreshSession()) {
+          return loadTickets(true)
+        }
+        console.error('[Support] tickets query error:', JSON.stringify(error))
         setGlobalError(
           isTableMissing(error) ? 'Раздел поддержки ещё не настроен' : error.message
         )
@@ -127,14 +152,17 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
 
   // ── Load messages ─────────────────────────────────────────────────────────
 
-  const loadMessages = useCallback(async (ticketId: string) => {
+  const loadMessages = useCallback(async (ticketId: string, retried = false) => {
     const sb = getSupabase()
     if (!sb) return
-    const { data } = await sb
+    const { data, error } = await sb
       .from('support_messages')
       .select('*')
       .eq('ticket_id', ticketId)
       .order('created_at', { ascending: true })
+    if (error && !retried && isJwtExpired(error) && await tryRefreshSession()) {
+      return loadMessages(ticketId, true)
+    }
     if (data) setMessages(data as SupportMessage[])
   }, [])
 
@@ -183,7 +211,7 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
 
   // ── Send message (creates ticket on first message for users) ───────────────
 
-  async function handleSend() {
+  async function handleSend(retried = false) {
     const text = reply.trim()
     if (!text || sending) return
     setSendError(null)
@@ -207,9 +235,10 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
           .select()
           .single()
         if (error) {
-          throw isTableMissing(error)
-            ? new Error('Раздел поддержки ещё не настроен')
-            : new Error(error.message)
+          if (!retried && isJwtExpired(error) && await tryRefreshSession()) {
+            setSending(false); setReply(text); return handleSend(true)
+          }
+          throw new Error(error.message)
         }
         ticket = data as SupportTicket
         setSelectedTicket(ticket)
@@ -233,11 +262,13 @@ export default function SupportView({ onUnreadChange, onClose }: Props) {
         message:   text,
       })
       if (error) {
+        console.error('[Support] insert message error:', JSON.stringify(error))
         // Roll back optimistic message
         setMessages((prev) => prev.filter((m) => m.id !== tempId))
-        throw isTableMissing(error)
-          ? new Error('Раздел поддержки ещё не настроен')
-          : new Error(error.message)
+        if (!retried && isJwtExpired(error) && await tryRefreshSession()) {
+          setSending(false); setReply(text); return handleSend(true)
+        }
+        throw new Error(error.message)
       }
 
       // Replace optimistic message with real server data

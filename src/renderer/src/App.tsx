@@ -670,11 +670,18 @@ export default function App() {
         .select('id, role, full_name')
         .eq('id', userId)
         .single()
-      if (error || !data) {
-        // Profile missing — create with default role (backfill case)
-        await sb.from('profiles').upsert({ id: userId, role: 'student' }, { onConflict: 'id' })
-        setUserProfile({ id: userId, email, role: 'student', full_name: null })
-      } else {
+      if (error) {
+        console.error('[Profile] query error:', error.message, error.code)
+        // Don't overwrite existing profile on transient errors (e.g. JWT expired)
+        // Only create profile if we get a definitive "not found" (PGRST116 = no rows)
+        if (error.code === 'PGRST116') {
+          await sb.from('profiles').insert({ id: userId, role: 'student' })
+          setUserProfile({ id: userId, email, role: 'student', full_name: null })
+        } else {
+          // Transient error — use student as fallback but do NOT upsert
+          setUserProfile({ id: userId, email, role: 'student', full_name: null })
+        }
+      } else if (data) {
         setUserProfile({
           id:        userId,
           email,
@@ -740,7 +747,11 @@ export default function App() {
   }
 
   async function handleSignIn(email: string, password: string) {
-    const sb = getSupabase()
+    let sb = getSupabase()
+    // Re-initialise client if it was cleared by sign-out
+    if (!sb && supabaseUrl && supabaseKey) {
+      sb = initSupabase(supabaseUrl, supabaseKey)
+    }
     if (!sb) throw new Error('Supabase не настроен')
     const { data, error } = await sb.auth.signInWithPassword({ email, password })
     if (error) throw error
@@ -771,7 +782,10 @@ export default function App() {
   }
 
   async function handleSignUp(email: string, password: string) {
-    const sb = getSupabase()
+    let sb = getSupabase()
+    if (!sb && supabaseUrl && supabaseKey) {
+      sb = initSupabase(supabaseUrl, supabaseKey)
+    }
     if (!sb) throw new Error('Supabase не настроен')
     const { data, error } = await sb.auth.signUp({ email, password })
     if (error) throw error

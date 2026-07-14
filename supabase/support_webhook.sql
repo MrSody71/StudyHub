@@ -16,17 +16,24 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  supabase_url      text := 'https://pjuawdizgfwrwtbcnnfb.supabase.co';
-  supabase_anon_key text := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqdWF3ZGl6Z2Z3cnd0YmNubmZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MjYwMDksImV4cCI6MjA5NjAwMjAwOX0.Azls7NiKv6I9yZFlIoz8WIpplgETDB8ivamVwHAJlWE';
+  _url     text := 'https://pjuawdizgfwrwtbcnnfb.supabase.co/functions/v1/notify-support';
+  _key     text := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqdWF3ZGl6Z2Z3cnd0YmNubmZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MjYwMDksImV4cCI6MjA5NjAwMjAwOX0.Azls7NiKv6I9yZFlIoz8WIpplgETDB8ivamVwHAJlWE';
+  _body    jsonb;
+  _headers jsonb;
 BEGIN
-  PERFORM net.http_post(
-    url     := supabase_url || '/functions/v1/notify-support',
-    headers := jsonb_build_object(
-                 'Content-Type',  'application/json',
-                 'Authorization', 'Bearer ' || supabase_anon_key
-               ),
-    body    := jsonb_build_object('record', row_to_json(NEW))::text
-  );
+  _body    := jsonb_build_object('record', to_jsonb(NEW));
+  _headers := jsonb_build_object(
+                'Content-Type',  'application/json',
+                'Authorization', 'Bearer ' || _key
+              );
+
+  -- Wrap in exception handler so notification failure never blocks the INSERT
+  BEGIN
+    PERFORM net.http_post(_url, _body, '{}'::jsonb, _headers, 5000);
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'notify_support_trigger failed: %', SQLERRM;
+  END;
+
   RETURN NEW;
 END;
 $$;
